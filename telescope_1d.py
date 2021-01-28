@@ -21,6 +21,27 @@ class Telescope1D:
         self.DDish = DDish
         self.redundant = redundant
 
+        # If redundant = True, the distance between consecutive dishes is DDish
+        dish_locations = np.arange(0,Ndishes,dtype=float)
+        for ii in np.arange(1,Ndishes):
+            if redundant:
+                distance = DDish # This makes redundant array
+            else:
+                # Distances between two consecutive dishes are
+                # DDish, 1.25*DDish, 1.5*DDish, 1.75*DDish, 2*DDish, DDish, ...
+                #distance = DDish*((ii-1)%5*0.25+1)
+                distance = DDish*(1+np.random.randint(0,3)/4)
+            dish_locations[ii] = dish_locations[ii-1]+distance
+        self.dish_locations = dish_locations
+        
+        # Get every baseline combination, compute baseline lengths
+        self.baseline_lengths = np.array([d2-d1 for d1, d2 in
+                                          combinations(dish_locations,2)])
+        self.unique_baseline_lengths = np.unique(self.baseline_lengths)
+
+        # Get 2D array of (N freqs x N unique baselines) containg D/lambda
+        self.DoL = np.outer(1/self.lams, self.unique_baseline_lengths)
+
     @property
     def freqs(self):
         return np.linspace(self.minfreq,self.maxfreq,self.Nfreq)
@@ -74,53 +95,16 @@ class Telescope1D:
         DoL can be a vector or array.
         Not nearest integer; this returns a float.
         '''
-        return DoL*self.Npad*2+0.5
+        return DoL*self.Npad*2
 
-    def primary_beam_1(self, D, freq_MHz):
+    def primary_beam_1(self, freq_MHz):
         '''
-        Take baseline length D and frequency in MHz, return beam.
+        Take frequency in MHz, return beam.
         '''
         lam = self.freq2lam(freq_MHz)
         t = self.empty_uv()
-        t[:int(self.DoL2ndx(D/lam/2))] = 1.0
+        t[:int(self.DoL2ndx(self.DDish/lam/2))] = 1.0
         return self.uv2image(t)
-
-    @property
-    def dish_locations(self):
-        '''
-        If self.redundant = True, the distance between consecutive dishes is
-        the diameter of the dishes, self.DDish.
-        Otherwise, distances between two consecutive dishes are D, 1.25*D,
-        1.5*D, 1.75*D, 2*D, D, 1.25*D, ... where D is the dish diameter.
-        '''
-        dish_locations = np.arange(0,self.Ndishes,dtype=float)
-        for ii in np.arange(1,self.Ndishes):
-            if self.redundant:
-                distance = self.DDish # This makes redundant array
-            else:
-                # Get D, 1.25*D, 1.5*D, 1.75*D, 2*D, D, ... for ii = 1, 2, ...
-                distance = self.DDish*((ii-1)%5*0.25+1)
-            dish_locations[ii] = dish_locations[ii-1]+distance
-        return dish_locations
-
-    @property
-    def baseline_lengths(self):
-        '''
-        Get every baseline combination, compute baseline lengths.
-        Returns a vector of all baseline lengths for each combination.
-        '''
-        baseline_lengths = np.array([d2-d1 for d1, d2 in
-                                     combinations(self.dish_locations,2)])
-        return baseline_lengths
-
-    @property
-    def DoL(self):
-        '''
-        Get 2D array of (N freqs x N unique baselines) containg D/lambda for
-        each combination.
-        '''
-        unique_baseline_lengths = np.unique(self.baseline_lengths)
-        return np.outer(1/self.lams, unique_baseline_lengths)
 
     def uv2uvplane(self, uv, indices=None):
         '''
@@ -157,9 +141,6 @@ class Telescope1D:
         For no time/phase error, do time_error_sigma = 0 seconds.
         Returns (N frequencies x N unique baselines) array.
         '''
-        baseline_lengths = self.baseline_lengths
-        dish_locations = self.dish_locations
-        unique_baseline_lengths = np.unique(baseline_lengths)
         indices = self.DoL2ndx(self.DoL).astype(int)
         rmap_obs = []
         # Add time errors; each antenna's error sampled from Gaussian
@@ -168,13 +149,13 @@ class Telescope1D:
             phase_errors = time_errors*f*1e6*2*np.pi
             # Loop through each unique baseline length
             # Get and average all the observed visibilities for each
-            for j, baseline_len in enumerate(unique_baseline_lengths):
-                redundant_baseline_idxs = np.where(baseline_lengths==baseline_len)[0]
+            for j, baseline_len in enumerate(self.unique_baseline_lengths):
+                redundant_baseline_idxs = np.where(self.baseline_lengths==baseline_len)[0]
                 uvplane_obs = []
                 for k in redundant_baseline_idxs:
-                    dish1_loc, dish2_loc = list(combinations(dish_locations,2))[k]
-                    dish1_idx = np.where(dish_locations==dish1_loc)[0][0]
-                    dish2_idx = np.where(dish_locations==dish2_loc)[0][0]
+                    dish1_loc, dish2_loc = list(combinations(self.dish_locations,2))[k]
+                    dish1_idx = np.where(self.dish_locations==dish1_loc)[0][0]
+                    dish2_idx = np.where(self.dish_locations==dish2_loc)[0][0]
                     uvplane_obs.append((np.exp(1j*(phase_errors[dish2_idx]-phase_errors[dish1_idx])))*uvplane[:,j])
                 uvplane_obs = np.array(uvplane_obs, np.complex)
                 uvplane[:,j] = np.mean(uvplane_obs, axis=0)
@@ -196,10 +177,35 @@ class Telescope1D:
         plt.colorbar()
         plt.show()
 
-    def plot_wedge(self):
+    def get_p2fac(self):
+        return np.array([np.abs(self.primary_beam_1(f)**2)/np.cos(self.alpha) for f in self.freqs])
+
+    def plot_wedge(self, Nreal=100):
         '''
         Simulate various skies, and plot the wedge.
         '''
-        #TODO: how does the p2fac change for a non redundant array? is the beam dependent on the baseline lengths or just dish diameter?
-        #TODO cont'd: if dependent on all the unique baseline lengths, how to deal with that in the nested for loop?
-        pass
+        p2fac = self.get_p2fac()
+        Nuniquebaselines = self.unique_baseline_lengths.shape[0]
+        uvplane = np.zeros((self.Nfreq,Nuniquebaselines),np.complex)
+        ps = np.zeros((self.Nfreq+1,Nuniquebaselines)) # (2*Nfreq/2)+1 = Nfreq+1
+        for c in range(Nreal):
+            # Create a random sky, this sky will be the same at all frequencies
+            sky = np.random.uniform(0,1,self.Npix)
+            # Loop over frequencies
+            for i,f in enumerate(self.freqs):
+                # Multiply by the beam^2/cos(alpha)
+                msky = sky * p2fac[i,:]
+                # FT to the uvplane and sample at indices corresponding to D/lambda
+                uv = self.image2uv(msky)
+                uvplane[i,:] = self.uv2uvplane(uv,indices=self.DoL2ndx(self.DoL)[i,:])
+            # After uvplane is done, calculate power spectrum in the frequency direction
+            # This gives delay spectrum
+            for j in range(Nuniquebaselines):
+                # FFT along frequency axis, get the power in the frequency domain
+                # Power in the frequency domain gives us structure in the redshift direction, for 21 cm
+                ps[:,j] += np.abs(rfft(np.hstack((uvplane[:,j],np.zeros(self.Nfreq))))**2)
+        plt.imshow(ps[:,:],origin='lower',aspect='auto',interpolation='nearest', norm=LogNorm(), cmap='jet')
+        plt.xlabel(r'Baseline Length - $k_\perp$')
+        plt.ylabel('Delay - FT Along Frequency Direction')
+        plt.colorbar()
+        plt.show()
