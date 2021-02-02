@@ -60,9 +60,11 @@ class Telescope1D:
         '''
         Convert from pixel space to uv space by FFT.
         '''
-        assert(len(image)==self.Npix)
+        #assert(len(image)==self.Npix)
         bigimage = np.zeros(self.Npix*self.Npad)
-        bigimage[:self.Npix//2] = image[-self.Npix//2:]
+        # Put last half of image in beginning of bigimage
+        bigimage[:self.Npix//2+1] = image[-self.Npix//2-1:]
+        # Put first half of image at end of bigimage
         bigimage[-self.Npix//2:] = image[:self.Npix//2]
         return rfft(bigimage)
 
@@ -72,7 +74,8 @@ class Telescope1D:
         '''
         assert(len(uv) == self.Nfft//2+1)
         bigimage = irfft(uv)
-        image = np.hstack((bigimage[-self.Npix//2:],bigimage[:self.Npix//2]))
+        # Concatenate the last chunk of bigimage to first chunk of bigimage
+        image = np.hstack((bigimage[-self.Npix//2:],bigimage[:self.Npix//2+1]))
         return image
 
     @property
@@ -81,13 +84,14 @@ class Telescope1D:
         Returns sin(theta), where theta describes angular coordinates from
         -pi/2 to +pi/2 with theta = 0 pointing at the zenith.
         '''
-        return (np.arange(-self.Npix//2,self.Npix//2)+0.5)*(2/self.Npix)
+        #return (np.arange(-self.Npix//2,self.Npix//2)+0.5)*(2/self.Npix)
+        return np.linspace(-1,1,self.Npix+1)
 
     def empty_uv(self):
         return np.zeros(self.Nfft//2+1,np.complex)
 
     def empty_image(self):
-        return np.zeros(self.Npix,np.float)
+        return np.zeros(self.Npix+1,np.float)
 
     def DoL2ndx(self, DoL):
         '''
@@ -141,11 +145,11 @@ class Telescope1D:
         For no time/phase error, do time_error_sigma = 0 seconds.
         Returns (N frequencies x N unique baselines) array.
         '''
-        indices = self.DoL2ndx(self.DoL).astype(int)
+        indices = (self.DoL2ndx(self.DoL)+0.5).astype(int)
         rmap_obs = []
         # Add time errors; each antenna's error sampled from Gaussian
         time_errors = np.random.normal(0,time_error_sigma,self.Ndishes)
-        for i,f in enumerate(self.freqs):
+        for i, f in enumerate(self.freqs):
             phase_errors = time_errors*f*1e6*2*np.pi
             # Loop through each unique baseline length
             # Get and average all the observed visibilities for each
@@ -165,12 +169,12 @@ class Telescope1D:
         rmap_obs = np.array(rmap_obs)
         return rmap_obs
 
-    def plot_rmap(self, rmap):
+    def plot_rmap(self, rmap, vmax=None, vmin=None):
         '''
         Plot the dirty map.
         '''
         plt.figure(figsize=(20,10))
-        plt.imshow(rmap,aspect='auto',origin='lower',
+        plt.imshow(rmap,aspect='auto',origin='lower', vmax=vmax, vmin=vmin,
                    extent=(self.alpha[0],self.alpha[-1],self.freqs[0],self.freqs[-1]))
         plt.ylabel('frequency [MHz]')
         plt.xlabel(r'sin($\theta$)')
@@ -190,7 +194,7 @@ class Telescope1D:
         ps = np.zeros((self.Nfreq+1,Nuniquebaselines)) # (2*Nfreq/2)+1 = Nfreq+1
         for c in range(Nreal):
             # Create a random sky, this sky will be the same at all frequencies
-            sky = np.random.uniform(0,1,self.Npix)
+            sky = np.random.uniform(0,1,self.Npix+1)
             # Loop over frequencies
             for i,f in enumerate(self.freqs):
                 # Multiply by the beam^2/cos(alpha)
