@@ -153,18 +153,19 @@ class Telescope1D:
             phase_errors = time_errors*f*1e6*2*np.pi
             # Loop through each unique baseline length
             # Get and average all the observed visibilities for each
+            uvplane_obs = np.zeros_like(uvplane, np.complex)
             for j, baseline_len in enumerate(self.unique_baseline_lengths):
                 redundant_baseline_idxs = np.where(self.baseline_lengths==baseline_len)[0]
-                uvplane_obs = []
+                uvplane_j = []
                 for k in redundant_baseline_idxs:
                     dish1_loc, dish2_loc = list(combinations(self.dish_locations,2))[k]
                     dish1_idx = np.where(self.dish_locations==dish1_loc)[0][0]
                     dish2_idx = np.where(self.dish_locations==dish2_loc)[0][0]
-                    uvplane_obs.append((np.exp(1j*(phase_errors[dish2_idx]-phase_errors[dish1_idx])))*uvplane[:,j])
-                uvplane_obs = np.array(uvplane_obs, np.complex)
-                uvplane[:,j] = np.mean(uvplane_obs, axis=0)
+                    uvplane_j.append((np.exp(1j*(phase_errors[dish2_idx]-phase_errors[dish1_idx])))*uvplane[:,j])
+                uvplane_j = np.array(uvplane_j, np.complex)
+                uvplane_obs[:,j] = np.mean(uvplane_j, axis=0)
             uvi = self.empty_uv()
-            uvi[indices[i,:]] = uvplane[i,:]
+            uvi[indices[i,:]] = uvplane_obs[i,:]
             rmap_obs.append(self.uv2image(uvi))
         rmap_obs = np.array(rmap_obs)
         return rmap_obs
