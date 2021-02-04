@@ -238,3 +238,4 @@ class Telescope1D:
         plt.ylabel('Delay - FT Along Frequency Direction')
         plt.colorbar()
         plt.show()
+        return ps
