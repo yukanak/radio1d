@@ -141,7 +141,7 @@ class Telescope1D:
 
     def get_obs_uvplane(self, uvplane, time_error_sigma=10e-12):
         '''
-        Get the uvplane with time error
+        Get the uvplane with time error.
         '''
         time_errors = np.random.normal(0,time_error_sigma,self.Ndishes)
         uvplane_obs = np.zeros_like(uvplane, np.complex)
@@ -165,7 +165,7 @@ class Telescope1D:
         '''
         Get the rmap observed by the telescope array.
         For no time/phase error, do time_error_sigma = 0 seconds.
-        Returns (N frequencies x N unique baselines) array.
+        Returns (N frequencies x Npix+1) array.
         '''
         indices = (self.DoL2ndx(self.DoL)+0.5).astype(int)
         rmap_obs = []
@@ -243,3 +243,32 @@ class Telescope1D:
         plt.colorbar()
         plt.show()
         return ps
+
+    def get_rmap_residuals(self, rmap_no_error, rmap_with_error, n=1,
+                           vmax=None, vmin=None):
+        '''
+        n is how many frequency bins of freqs should we bin together.
+        '''
+        freq_vec = np.zeros(len(self.freqs)//n)
+        max_rmap_no_error = np.zeros_like(rmap_no_error)
+        for i in range(len(self.freqs)//n):
+            freq_vec[i] = np.mean(self.freqs[i*n:(1+i)*n])
+            max_rmap_no_error[i*n:(1+i)*n,:] = np.max(rmap_no_error[i*n:(1+i)*n,:])
+        residuals = (rmap_with_error-rmap_no_error)/max_rmap_no_error
+
+        # Check that max_rmap_no_error is frequency independent for the most part
+        plt.plot(telescope.freqs, max_rmap_no_error[:,0])
+        plt.xlabel('Frequency [MHz]')
+        plt.ylabel('Maximum rmap_no_error Value')
+        plt.show()
+
+        # Plot the residuals
+        plt.figure(figsize=(20,10))
+        plt.imshow(residuals,aspect='auto',origin='lower', vmax=vmax, vmin=vmin,
+                   extent=(self.alpha[0],self.alpha[-1],self.freqs[0],self.freqs[-1]))
+        plt.ylabel('frequency [MHz]')
+        plt.xlabel(r'sin($\theta$)')
+        plt.title('Residuals')
+        plt.colorbar()
+        plt.show()
+        return residuals
