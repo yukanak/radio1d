@@ -257,7 +257,7 @@ class Telescope1D:
         residuals = (rmap_with_error-rmap_no_error)/max_rmap_no_error
 
         # Check that max_rmap_no_error is frequency independent for the most part
-        plt.plot(telescope.freqs, max_rmap_no_error[:,0])
+        plt.plot(self.freqs, max_rmap_no_error[:,0])
         plt.xlabel('Frequency [MHz]')
         plt.ylabel('Maximum rmap_no_error Value')
         plt.show()
