@@ -139,6 +139,28 @@ class Telescope1D:
                     uvplane[ii,jj] = val
         return uvplane
 
+    def get_obs_uvplane(self, uvplane, time_error_sigma=10e-12):
+        '''
+        Get the uvplane with time error
+        '''
+        time_errors = np.random.normal(0,time_error_sigma,self.Ndishes)
+        uvplane_obs = np.zeros_like(uvplane, np.complex)
+        for i, f in enumerate(self.freqs):
+            phase_errors = time_errors*f*1e6*2*np.pi
+            # Loop through each unique baseline length
+            # Get and average all the observed visibilities for each
+            for j, baseline_len in enumerate(self.unique_baseline_lengths):
+                redundant_baseline_idxs = np.where(self.baseline_lengths==baseline_len)[0]
+                uvplane_j = []
+                for k in redundant_baseline_idxs:
+                    dish1_loc, dish2_loc = list(combinations(self.dish_locations,2))[k]
+                    dish1_idx = np.where(self.dish_locations==dish1_loc)[0][0]
+                    dish2_idx = np.where(self.dish_locations==dish2_loc)[0][0]
+                    uvplane_j.append((np.exp(1j*(phase_errors[dish2_idx]-phase_errors[dish1_idx])))*uvplane[i,j])
+                uvplane_j = np.array(uvplane_j, np.complex)
+                uvplane_obs[i,j] = np.mean(uvplane_j, axis=0)
+        return uvplane_obs
+
     def get_obs_rmap(self, uvplane, time_error_sigma=10e-12):
         '''
         Get the rmap observed by the telescope array.
@@ -150,12 +172,12 @@ class Telescope1D:
         if time_error_sigma > 0:
             # Add time errors; each antenna's error sampled from Gaussian
             time_errors = np.random.normal(0,time_error_sigma,self.Ndishes)
+        uvplane_obs = np.zeros_like(uvplane, np.complex)
         for i, f in enumerate(self.freqs):
             if time_error_sigma > 0:
                 phase_errors = time_errors*f*1e6*2*np.pi
                 # Loop through each unique baseline length
                 # Get and average all the observed visibilities for each
-                uvplane_obs = np.zeros_like(uvplane, np.complex)
                 for j, baseline_len in enumerate(self.unique_baseline_lengths):
                     redundant_baseline_idxs = np.where(self.baseline_lengths==baseline_len)[0]
                     uvplane_j = []
@@ -163,9 +185,9 @@ class Telescope1D:
                         dish1_loc, dish2_loc = list(combinations(self.dish_locations,2))[k]
                         dish1_idx = np.where(self.dish_locations==dish1_loc)[0][0]
                         dish2_idx = np.where(self.dish_locations==dish2_loc)[0][0]
-                        uvplane_j.append((np.exp(1j*(phase_errors[dish2_idx]-phase_errors[dish1_idx])))*uvplane[:,j])
+                        uvplane_j.append((np.exp(1j*(phase_errors[dish2_idx]-phase_errors[dish1_idx])))*uvplane[i,j])
                     uvplane_j = np.array(uvplane_j, np.complex)
-                    uvplane_obs[:,j] = np.mean(uvplane_j, axis=0)
+                    uvplane_obs[i,j] = np.mean(uvplane_j, axis=0)
             else:
                 uvplane_obs = uvplane
             uvi = self.empty_uv()
@@ -208,25 +230,7 @@ class Telescope1D:
                 uv = self.image2uv(msky)
                 uvplane[i,:] = self.uv2uvplane(uv,indices=self.DoL2ndx(self.DoL)[i,:])
             if time_error_sigma > 0:
-                # Assign time errors; each antenna's error sampled from Gaussian
-                time_errors = np.random.normal(0,time_error_sigma,self.Ndishes)
-                for i, f in enumerate(self.freqs):
-                    # Get the phase errors
-                    phase_errors = time_errors*f*1e6*2*np.pi
-                    # Loop through each unique baseline length
-                    # Get and average all the observed visibilities for each
-                    uvplane_obs = np.zeros_like(uvplane, np.complex)
-                    for j, baseline_len in enumerate(self.unique_baseline_lengths):
-                        redundant_baseline_idxs = np.where(self.baseline_lengths==baseline_len)[0]
-                        uvplane_j = []
-                        for k in redundant_baseline_idxs:
-                            dish1_loc, dish2_loc = list(combinations(self.dish_locations,2))[k]
-                            dish1_idx = np.where(self.dish_locations==dish1_loc)[0][0]
-                            dish2_idx = np.where(self.dish_locations==dish2_loc)[0][0]
-                            uvplane_j.append((np.exp(1j*(phase_errors[dish2_idx]-phase_errors[dish1_idx])))*uvplane[:,j])
-                        uvplane_j = np.array(uvplane_j, np.complex)
-                        uvplane_obs[:,j] = np.mean(uvplane_j, axis=0)
-                uvplane = uvplane_obs
+                uvplane = self.get_obs_uvplane(uvplane, time_error_sigma)
             # After uvplane is done, calculate power spectrum in the frequency direction
             # This gives delay spectrum
             for j in range(Nuniquebaselines):
