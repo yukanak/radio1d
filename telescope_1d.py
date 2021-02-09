@@ -221,7 +221,7 @@ class Telescope1D:
         ps = np.zeros((self.Nfreq+1,Nuniquebaselines)) # (2*Nfreq/2)+1 = Nfreq+1
         for c in range(Nreal):
             # Create a random sky, this sky will be the same at all frequencies
-            sky = np.random.uniform(0,1,self.Npix+1)
+            sky = self.get_uniform_sky(high=1)
             # Loop over frequencies
             for i, f in enumerate(self.freqs):
                 # Multiply by the beam^2/cos(alpha)
@@ -272,3 +272,31 @@ class Telescope1D:
         plt.colorbar()
         plt.show()
         return residuals
+
+    def get_point_source_sky(self, idx=None, n=None):
+        '''
+        Make sky image with point sources at locations specified by list idx.
+        If idx is not specified, n point source locations are chosen at random.
+        '''
+        image = self.empty_image()
+        if idx is None:
+            idx = []
+            for i in range(n):
+                idx.append(np.random.randint(low=0, high=self.Npix))
+        else:
+            n = len(idx)
+        for i in range(n):
+            image[idx[i]] = 1
+        return image
+
+    def get_gaussian_sky(self, sigma):
+        '''
+        Get a Gaussian sky with the specified sigma.
+        '''
+        return np.random.normal(0,sigma,self.Npix+1)
+
+    def get_uniform_sky(self, high=1):
+        '''
+        Get a uniform random sky from 0 to high.
+        '''
+        return np.random.uniform(0,high,self.Npix+1)
