@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 from numpy.fft import rfft,irfft
 from matplotlib.colors import LogNorm
 from itertools import combinations
+import astropy.coordinates
+import astropy.cosmology
 
 class Telescope1D:
     def __init__(self, Nfreq=256, Ndishes=32, DDish=6, Npix=2**12, Npad=2**8,
@@ -300,3 +302,96 @@ class Telescope1D:
         Get a uniform random sky from 0 to high.
         '''
         return np.random.uniform(0,high,self.Npix+1)
+
+    def get_rmap_ps(self, rmap, Nfreqchunks=4, m=2, vmin=None, vmax=None):
+        '''
+        Get and plot the power spectrum for rmap.
+        For just one full plot of the power spectrum, set Nfreqchunks as 1,
+        otherwise we divide the rmap into frequency chunks and
+        compute the power spectrum independently for each chunk.
+        After getting the power spectra, we bin in both x and y directions;
+        m is how many of the existing bins we want to put in each bin.
+        '''
+        # Divide into frequency chunks
+        # In each chunk, FT along the line of sight and square
+        n = self.Nfreq//Nfreqchunks
+        ps = []
+        for i in range(Nfreqchunks):
+            ps_chunk = np.zeros((n+1,self.Npix+1))
+            for j in range(self.Npix+1):
+                ps_chunk[:,j] = np.abs(rfft(np.hstack((rmap[i*n:(1+i)*n,j],np.zeros(n))))**2)
+            ps.append(ps_chunk)
+        
+        # After getting the power spectra, bin in both x and y directions
+        n_rows = n+1
+        n_cols = self.Npix+1
+        n_row_bins = n_rows//m
+        n_col_bins = n_cols//m
+        # Discard some values if necessary
+        if n_rows > m*n_row_bins:
+            for i, ps_chunk in enumerate(ps):
+                ps[i] = ps_chunk[:m*n_row_bins,:]
+        if n_cols > m*n_col_bins:
+            for i, ps_chunk in enumerate(ps):
+                ps[i] = ps_chunk[:,:m*n_col_bins]
+        ps_binned = []
+        # Bin
+        for ps_chunk in ps:
+            ps_chunk_binned = ps_chunk.reshape(n_row_bins, n_rows//n_row_bins, n_col_bins, n_cols//n_col_bins).sum(axis=3).sum(axis=1)
+            ps_binned.append(ps_chunk_binned)
+        
+        # Convert from frequency to distance (Mpc/h)
+        fundamental_modes = []
+        last_modes = []
+        for i in range(Nfreqchunks):
+            freq_first = self.freqs[i*n]
+            freq_last = self.freqs[(1+i)*n-1]
+            # Get size of the chunk (dist_max) then the fundamental mode is 2*pi/dist_max
+            dist_max = self.freq2distance(freq_first, freq_last)
+            fundamental_modes.append(2*np.pi/dist_max) # In h/Mpc
+            # Similarly for the last mode
+            dist_min = self.freq2distance(freq_first, self.freqs[i*n+m])
+            last_modes.append(2*np.pi/dist_min)
+        
+        fig = plt.figure(figsize=(50,25))
+        for i in range(Nfreqchunks):
+            plt.subplot(2,Nfreqchunks//2,i+1)
+            plt.imshow(ps_binned[i],origin='lower',aspect='auto',
+                       interpolation='nearest', norm=LogNorm(), vmin=vmin, vmax=vmax,
+                       extent=(self.alpha[0],self.alpha[-1],fundamental_modes[i],last_modes[i]))
+            plt.xlabel(r'sin($\theta$)')
+            plt.ylabel('[h/Mpc]')
+            plt.title(f'Frequency Chunk {i+1}')
+            plt.colorbar()
+        fig.subplots_adjust(wspace=0, hspace=0.1, top=0.95)
+        plt.show()
+       
+        return (ps_binned, fundamental_modes, last_modes)
+
+    def freq2distance(self, freq1, freq2=1420.4):
+        '''
+        Default for the second frequency is the 21 cm frequency, 1420.4 MHz.
+        Convert from frequency to redshift to distance in Mpc/h.
+        '''
+        z = freq2/freq1 - 1
+        distance = astropy.coordinates.Distance(z=z).Mpc / astropy.cosmology.Planck15.h
+        return distance
+
+    def plot_rmap_ps_slice(self, rmap_ps_binned, fundamental_modes, last_modes,
+                           alpha_idx, chunk=0, m=2):
+        '''
+        Plot the power spectrum (of the specified chunk) returned by
+        get_rmap_ps for a specific alpha.
+        The argument m is the same as the m in get_rmap_ps; it tells us how
+        we did the binning.
+        '''
+        alpha_idx_binned = alpha_idx//m # Divide by the m argument of get_rmap_ps
+        modes = np.arange(fundamental_modes[chunk], last_modes[chunk],
+                          step=(last_modes[chunk]-fundamental_modes[chunk])/len(rmap_ps_binned[chunk][:,alpha_idx_binned]))
+
+        alpha = self.alpha[alpha_idx]
+        plt.loglog(modes, rmap_ps_binned[chunk][:,alpha_idx_binned])
+        plt.xlabel('modes [h/Mpc]')
+        plt.ylabel('power spectrum')
+        plt.title(fr'rmap power spectrum, $\alpha$ = {alpha}')
+        plt.show()
