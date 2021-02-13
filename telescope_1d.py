@@ -217,20 +217,12 @@ class Telescope1D:
         '''
         Simulate various skies, and plot the wedge.
         '''
-        p2fac = self.get_p2fac()
         Nuniquebaselines = self.unique_baseline_lengths.shape[0]
-        uvplane = np.zeros((self.Nfreq,Nuniquebaselines),np.complex)
         ps = np.zeros((self.Nfreq+1,Nuniquebaselines)) # (2*Nfreq/2)+1 = Nfreq+1
         for c in range(Nreal):
             # Create a random sky, this sky will be the same at all frequencies
             sky = self.get_uniform_sky(high=1)
-            # Loop over frequencies
-            for i, f in enumerate(self.freqs):
-                # Multiply by the beam^2/cos(alpha)
-                msky = sky * p2fac[i,:]
-                # FT to the uvplane and sample at indices corresponding to D/lambda
-                uv = self.image2uv(msky)
-                uvplane[i,:] = self.uv2uvplane(uv,indices=self.DoL2ndx(self.DoL)[i,:])
+            uvplane = self.beam_convolution(sky)
             if time_error_sigma > 0:
                 uvplane = self.get_obs_uvplane(uvplane, time_error_sigma)
             # After uvplane is done, calculate power spectrum in the frequency direction
@@ -245,6 +237,23 @@ class Telescope1D:
         plt.colorbar()
         plt.show()
         return ps
+
+    def beam_convolution(self, image):
+        '''
+        Take the image, multiply it by the beam^2/cos(alpha).
+        Do for each frequency, return the uvplane.
+        '''
+        p2fac = self.get_p2fac()
+        Nuniquebaselines = self.unique_baseline_lengths.shape[0]
+        uvplane = np.zeros((self.Nfreq,Nuniquebaselines),np.complex)
+        # Loop over frequencies
+        for i, f in enumerate(self.freqs):
+            # Multiply by the beam^2/cos(alpha)
+            msky = image * p2fac[i,:]
+            # FT to the uvplane and sample at indices corresponding to D/lambda
+            uv = self.image2uv(msky)
+            uvplane[i,:] = self.uv2uvplane(uv,indices=self.DoL2ndx(self.DoL)[i,:])
+        return uvplane
 
     def get_rmap_residuals(self, rmap_no_error, rmap_with_error, n=1,
                            vmax=None, vmin=None):
