@@ -312,7 +312,7 @@ class Telescope1D:
         '''
         return np.random.uniform(0,high,self.Npix+1)
 
-    def get_rmap_ps(self, rmap, Nfreqchunks=4, m=2, vmin=None, vmax=None):
+    def get_rmap_ps(self, rmap, Nfreqchunks=4, m=2, vmin=None, vmax=None, log=True):
         '''
         Get and plot the power spectrum for rmap.
         For just one full plot of the power spectrum, set Nfreqchunks as 1,
@@ -363,15 +363,26 @@ class Telescope1D:
             last_modes.append(2*np.pi/dist_min)
         
         fig = plt.figure(figsize=(50,25))
-        for i in range(Nfreqchunks):
-            plt.subplot(2,Nfreqchunks//2,i+1)
-            plt.imshow(ps_binned[i],origin='lower',aspect='auto',
-                       interpolation='nearest', norm=LogNorm(), vmin=vmin, vmax=vmax,
-                       extent=(self.alpha[0],self.alpha[-1],fundamental_modes[i],last_modes[i]))
-            plt.xlabel(r'sin($\theta$)')
-            plt.ylabel('[h/Mpc]')
-            plt.title(f'Frequency Chunk {i+1}')
-            plt.colorbar()
+        if log:
+            for i in range(Nfreqchunks):
+                plt.subplot(2,Nfreqchunks//2,i+1)
+                plt.imshow(ps_binned[i],origin='lower',aspect='auto',
+                           interpolation='nearest', norm=LogNorm(), vmin=vmin, vmax=vmax,
+                           extent=(self.alpha[0],self.alpha[-1],fundamental_modes[i],last_modes[i]))
+                plt.xlabel(r'sin($\theta$)')
+                plt.ylabel('[h/Mpc]')
+                plt.title(f'Frequency Chunk {i+1}')
+                plt.colorbar()
+        else:
+            for i in range(Nfreqchunks):
+                plt.subplot(2,Nfreqchunks//2,i+1)
+                plt.imshow(ps_binned[i],origin='lower',aspect='auto',
+                           interpolation='nearest', vmin=vmin, vmax=vmax,
+                           extent=(self.alpha[0],self.alpha[-1],fundamental_modes[i],last_modes[i]))
+                plt.xlabel(r'sin($\theta$)')
+                plt.ylabel('[h/Mpc]')
+                plt.title(f'Frequency Chunk {i+1}')
+                plt.colorbar()
         fig.subplots_adjust(wspace=0, hspace=0.1, top=0.95)
         plt.show()
        
