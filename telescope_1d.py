@@ -3,19 +3,19 @@ import matplotlib.pyplot as plt
 from numpy.fft import rfft,irfft
 from matplotlib.colors import LogNorm
 from itertools import combinations
-import astropy.coordinates
-import astropy.cosmology
+from astropy.cosmology import Planck15 as cosmo
 
 class Telescope1D:
-    def __init__(self, Nfreq=256, Ndishes=32, DDish=6, Npix=2**12, Npad=2**8,
+    def __init__(self, Nfreq=256, Ndishes=32, DDish=6, Npix_fft=2**12, Npad=2**8,
                  minfreq=400, maxfreq=800, redundant=False):
         '''
         DDish is the diameter of the dishes in meters.
         The minfreq, maxfreq should be in MHz.
         '''
-        self.Npix = Npix
+        self.Npix_fft = Npix_fft
+        self.Npix = self.Npix_fft+1
         self.Npad = Npad
-        self.Nfft = Npix*Npad
+        self.Nfft = Npix_fft*Npad
         self.Nfreq = Nfreq
         self.minfreq = minfreq
         self.maxfreq = maxfreq
@@ -62,12 +62,12 @@ class Telescope1D:
         '''
         Convert from pixel space to uv space by FFT.
         '''
-        #assert(len(image)==self.Npix)
-        bigimage = np.zeros(self.Npix*self.Npad)
+        #assert(len(image)==self.Npix_fft)
+        bigimage = np.zeros(self.Npix_fft*self.Npad)
         # Put last half of image in beginning of bigimage
-        bigimage[:self.Npix//2+1] = image[-self.Npix//2-1:]
+        bigimage[:self.Npix_fft//2+1] = image[-self.Npix_fft//2-1:]
         # Put first half of image at end of bigimage
-        bigimage[-self.Npix//2:] = image[:self.Npix//2]
+        bigimage[-self.Npix_fft//2:] = image[:self.Npix_fft//2]
         return rfft(bigimage)
 
     def uv2image(self, uv):
@@ -77,7 +77,7 @@ class Telescope1D:
         assert(len(uv) == self.Nfft//2+1)
         bigimage = irfft(uv)
         # Concatenate the last chunk of bigimage to first chunk of bigimage
-        image = np.hstack((bigimage[-self.Npix//2:],bigimage[:self.Npix//2+1]))
+        image = np.hstack((bigimage[-self.Npix_fft//2:],bigimage[:self.Npix_fft//2+1]))
         return image
 
     @property
@@ -86,14 +86,14 @@ class Telescope1D:
         Returns sin(theta), where theta describes angular coordinates from
         -pi/2 to +pi/2 with theta = 0 pointing at the zenith.
         '''
-        #return (np.arange(-self.Npix//2,self.Npix//2)+0.5)*(2/self.Npix)
-        return np.linspace(-1,1,self.Npix+1)
+        #return (np.arange(-self.Npix_fft//2,self.Npix_fft//2)+0.5)*(2/self.Npix_fft)
+        return np.linspace(-1,1,self.Npix)
 
     def empty_uv(self):
         return np.zeros(self.Nfft//2+1,np.complex)
 
     def empty_image(self):
-        return np.zeros(self.Npix+1,np.float)
+        return np.zeros(self.Npix,np.float)
 
     def DoL2ndx(self, DoL):
         '''
@@ -293,7 +293,7 @@ class Telescope1D:
         if idx is None:
             idx = []
             for i in range(n):
-                idx.append(np.random.randint(low=0, high=self.Npix))
+                idx.append(np.random.randint(low=0, high=self.Npix_fft))
         else:
             n = len(idx)
         for i in range(n):
@@ -304,15 +304,15 @@ class Telescope1D:
         '''
         Get a Gaussian sky with the specified sigma.
         '''
-        return np.random.normal(0,sigma,self.Npix+1)
+        return np.random.normal(0,sigma,self.Npix)
 
     def get_uniform_sky(self, high=1):
         '''
         Get a uniform random sky from 0 to high.
         '''
-        return np.random.uniform(0,high,self.Npix+1)
+        return np.random.uniform(0,high,self.Npix)
 
-    def get_rmap_ps(self, rmap, Nfreqchunks=4, m=2, vmin=None, vmax=None, log=True):
+    def get_rmap_ps(self, rmap, Nfreqchunks=4, m_alpha = 2, m_freq = 2, vmin=None, vmax=None, log=True):
         '''
         Get and plot the power spectrum for rmap.
         For just one full plot of the power spectrum, set Nfreqchunks as 1,
@@ -326,23 +326,22 @@ class Telescope1D:
         n = self.Nfreq//Nfreqchunks
         ps = []
         for i in range(Nfreqchunks):
-            ps_chunk = np.zeros((n+1,self.Npix+1))
-            for j in range(self.Npix+1):
-                ps_chunk[:,j] = np.abs(rfft(np.hstack((rmap[i*n:(1+i)*n,j],np.zeros(n))))**2)
+            #ps_chunk = np.zeros((n+1,self.Npix))
+            #for j in range(self.Npix):
+            #    ps_chunk[:,j] = np.abs(rfft(np.hstack((rmap[i*n:(1+i)*n,j],np.zeros(n))))**2)
+            tofft = np.vstack((rmap[i*n:(1+i)*n,:],np.zeros((n,self.Npix))))
+            ps_chunk = np.abs(rfft(tofft,axis=0)**2)
+            #print (tofft.shape,ps_chunk.shape)
             ps.append(ps_chunk)
         
         # After getting the power spectra, bin in both x and y directions
         n_rows = n+1
-        n_cols = self.Npix+1
-        n_row_bins = n_rows//m
-        n_col_bins = n_cols//m
+        n_cols = self.Npix
+        n_row_bins = n_rows//m_freq
+        n_col_bins = n_cols//m_alpha
         # Discard some values if necessary
-        if n_rows > m*n_row_bins:
-            for i, ps_chunk in enumerate(ps):
-                ps[i] = ps_chunk[:m*n_row_bins,:]
-        if n_cols > m*n_col_bins:
-            for i, ps_chunk in enumerate(ps):
-                ps[i] = ps_chunk[:,:m*n_col_bins]
+        for i, ps_chunk in enumerate(ps):
+            ps[i] = ps_chunk[:m_freq*n_row_bins,:m_alpha*n_col_bins]
         ps_binned = []
         # Bin
         for ps_chunk in ps:
@@ -350,17 +349,17 @@ class Telescope1D:
             ps_binned.append(ps_chunk_binned)
         
         # Convert from frequency to distance (Mpc/h)
-        fundamental_modes = []
+        k_modes_unbinned = []
         last_modes = []
         for i in range(Nfreqchunks):
             freq_first = self.freqs[i*n]
             freq_last = self.freqs[(1+i)*n-1]
             # Get size of the chunk (dist_max) then the fundamental mode is 2*pi/dist_max
             dist_max = self.freq2distance(freq_first, freq_last)
-            fundamental_modes.append(2*np.pi/dist_max) # In h/Mpc
-            # Similarly for the last mode
-            dist_min = self.freq2distance(freq_first, self.freqs[i*n+m])
-            last_modes.append(2*np.pi/dist_min)
+            k0 = 2*np.pi/dist_max 
+            print (f"Fundamental mode for chunk {i} is {k0}")
+            ### here we divided by extra two becaused we padded with zeros
+            k_modes_unbinned.append(np.arange(n_row_bins)*k0/2) # In h/Mpc
         
         fig = plt.figure(figsize=(50,25))
         if log:
@@ -368,7 +367,8 @@ class Telescope1D:
                 plt.subplot(2,Nfreqchunks//2,i+1)
                 plt.imshow(ps_binned[i],origin='lower',aspect='auto',
                            interpolation='nearest', norm=LogNorm(), vmin=vmin, vmax=vmax,
-                           extent=(self.alpha[0],self.alpha[-1],fundamental_modes[i],last_modes[i]))
+                           extent=(self.alpha[0],self.alpha[-1],k_modes_unbinned[i][0],
+                           k_modes_unbinned[i][-1]))
                 plt.xlabel(r'sin($\theta$)')
                 plt.ylabel('[h/Mpc]')
                 plt.title(f'Frequency Chunk {i+1}')
@@ -378,24 +378,31 @@ class Telescope1D:
                 plt.subplot(2,Nfreqchunks//2,i+1)
                 plt.imshow(ps_binned[i],origin='lower',aspect='auto',
                            interpolation='nearest', vmin=vmin, vmax=vmax,
-                           extent=(self.alpha[0],self.alpha[-1],fundamental_modes[i],last_modes[i]))
+                           extent=(self.alpha[0],self.alpha[-1],k_modes_unbinned[i][0],
+                           k_modes_unbinned[i][-1]))
                 plt.xlabel(r'sin($\theta$)')
                 plt.ylabel('[h/Mpc]')
                 plt.title(f'Frequency Chunk {i+1}')
                 plt.colorbar()
         fig.subplots_adjust(wspace=0, hspace=0.1, top=0.95)
         plt.show()
-       
-        return (ps_binned, fundamental_modes, last_modes)
+        k_modes = [ ks[:n_row_bins*m_freq].reshape((n_row_bins,-1)).mean(axis=1) for ks in k_modes_unbinned]
+        alpha_binned = self.alpha[:m_alpha*n_col_bins].reshape((n_col_bins,-1)).mean(axis=1)
+        return (ps_binned, k_modes, alpha_binned)
 
     def freq2distance(self, freq1, freq2=1420.4):
         '''
         Default for the second frequency is the 21 cm frequency, 1420.4 MHz.
-        Convert from frequency to redshift to distance in Mpc/h.
+        Convert from a pair of frequency to distance in Mpc/h bounded
+        by this pair of frequencies. By default freq2 corresponds to z2=0.
         '''
-        z = freq2/freq1 - 1
-        distance = astropy.coordinates.Distance(z=z).Mpc / astropy.cosmology.Planck15.h
-        return distance
+        freq_21 = 1420.4
+        z1 = freq_21/freq1 - 1
+        z2 = freq_21/freq2 - 1
+        distance1 = cosmo.comoving_distance(z=z1).value * cosmo.h
+        distance2 = cosmo.comoving_distance(z=z2).value * cosmo.h
+        print (z1,z2,distance1,distance2)
+        return distance1-distance2
 
     def plot_rmap_ps_slice(self, rmap_ps_binned_no_error, rmap_ps_binned_with_error,
                            fundamental_modes, last_modes,
@@ -419,14 +426,14 @@ class Telescope1D:
             plt.loglog(modes, rmap_ps_binned_with_error[chunk][:,alpha_idx_binned],
                        linestyle='-', color=color, label=fr'$\alpha$ = {alpha} (source, with noise)')
         if not alpha_idx_no_source:
-            alpha_idx_no_source.append(self.Npix//2)
-            alpha_idx_no_source.append(self.Npix//2+10)
+            alpha_idx_no_source.append(self.Npix_fft//2)
+            alpha_idx_no_source.append(self.Npix_fft//2+10)
             for a in alpha_idx_source:
-                if a+10<=self.Npix:
+                if a+10<=self.Npix_fft:
                     alpha_idx_no_source.append(a+5)
                 if a-10>=0:
                     alpha_idx_no_source.append(a-5)
-                if a+25<=self.Npix:
+                if a+25<=self.Npix_fft:
                     alpha_idx_no_source.append(a+25)
                 if a-25>=0:
                     alpha_idx_no_source.append(a-25)
