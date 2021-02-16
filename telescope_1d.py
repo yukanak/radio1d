@@ -397,21 +397,49 @@ class Telescope1D:
         distance = astropy.coordinates.Distance(z=z).Mpc / astropy.cosmology.Planck15.h
         return distance
 
-    def plot_rmap_ps_slice(self, rmap_ps_binned, fundamental_modes, last_modes,
-                           alpha_idx, chunk=0, m=2):
+    def plot_rmap_ps_slice(self, rmap_ps_binned_no_error, rmap_ps_binned_with_error,
+                           fundamental_modes, last_modes,
+                           alpha_idx_source, alpha_idx_no_source=[],
+                           chunk=0, m=2):
         '''
         Plot the power spectrum (of the specified chunk) returned by
         get_rmap_ps for a specific alpha.
         The argument m is the same as the m in get_rmap_ps; it tells us how
         we did the binning.
         '''
-        alpha_idx_binned = alpha_idx//m # Divide by the m argument of get_rmap_ps
         modes = np.arange(fundamental_modes[chunk], last_modes[chunk],
-                          step=(last_modes[chunk]-fundamental_modes[chunk])/len(rmap_ps_binned[chunk][:,alpha_idx_binned]))
-
-        alpha = self.alpha[alpha_idx]
-        plt.loglog(modes, rmap_ps_binned[chunk][:,alpha_idx_binned])
+                          step=(last_modes[chunk]-fundamental_modes[chunk])/len(rmap_ps_binned_no_error[chunk][:,0]))
+        ax = plt.gca()
+        for a in alpha_idx_source:
+            alpha_idx_binned = a//m # Divide by the m argument of get_rmap_ps
+            alpha = self.alpha[a]
+            color = next(ax._get_lines.prop_cycler)['color']
+            plt.loglog(modes, rmap_ps_binned_no_error[chunk][:,alpha_idx_binned],
+                       linestyle=':', color=color, label=fr'$\alpha$ = {alpha} (source, no noise)')
+            plt.loglog(modes, rmap_ps_binned_with_error[chunk][:,alpha_idx_binned],
+                       linestyle='-', color=color, label=fr'$\alpha$ = {alpha} (source, with noise)')
+        if not alpha_idx_no_source:
+            alpha_idx_no_source.append(self.Npix//2)
+            alpha_idx_no_source.append(self.Npix//2+10)
+            for a in alpha_idx_source:
+                if a+10<=self.Npix:
+                    alpha_idx_no_source.append(a+5)
+                if a-10>=0:
+                    alpha_idx_no_source.append(a-5)
+                if a+25<=self.Npix:
+                    alpha_idx_no_source.append(a+25)
+                if a-25>=0:
+                    alpha_idx_no_source.append(a-25)
+        for a in alpha_idx_no_source:
+            alpha_idx_binned = a//m # Divide by the m argument of get_rmap_ps
+            alpha = self.alpha[a]
+            color = next(ax._get_lines.prop_cycler)['color']
+            plt.loglog(modes, rmap_ps_binned_no_error[chunk][:,alpha_idx_binned],
+                       linestyle=':', color=color, label=fr'$\alpha$ = {alpha} (no noise)')
+            plt.loglog(modes, rmap_ps_binned_with_error[chunk][:,alpha_idx_binned],
+                       linestyle='-', color=color, label=fr'$\alpha$ = {alpha} (with noise)')
         plt.xlabel('modes [h/Mpc]')
         plt.ylabel('power spectrum')
-        plt.title(fr'rmap power spectrum, $\alpha$ = {alpha}')
+        plt.legend(bbox_to_anchor=(1.04,1), loc="upper left")
+        plt.title('rmap power spectrum')
         plt.show()
