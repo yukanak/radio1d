@@ -312,7 +312,7 @@ class Telescope1D:
         '''
         return np.random.uniform(0,high,self.Npix)
 
-    def get_rmap_ps(self, rmap, Nfreqchunks=4, m_alpha=2, m_freq=2, vmin=None, vmax=None, log=True):
+    def get_rmap_ps(self, rmap, Nfreqchunks=4, m_alpha=2, m_freq=2, padding=1, vmin=None, vmax=None, log=True):
         '''
         Get and plot the power spectrum for rmap.
         For just one full plot of the power spectrum, set Nfreqchunks as 1,
@@ -329,13 +329,17 @@ class Telescope1D:
             #ps_chunk = np.zeros((n+1,self.Npix))
             #for j in range(self.Npix):
             #    ps_chunk[:,j] = np.abs(rfft(np.hstack((rmap[i*n:(1+i)*n,j],np.zeros(n))))**2)
-            tofft = np.vstack((rmap[i*n:(1+i)*n,:],np.zeros((n,self.Npix))))
+            tofft = rmap[i*n:(1+i)*n,:]*(np.hanning(n)[:,None])
+            if padding>0:
+                tofft = np.vstack((tofft,np.zeros((n*padding,self.Npix))))
+            #plt.imshow(tofft,aspect='auto')
+            #stop()
             ps_chunk = np.abs(rfft(tofft,axis=0)**2)
             #print (tofft.shape,ps_chunk.shape)
             ps.append(ps_chunk)
         
         # After getting the power spectra, bin in both x and y directions
-        n_rows = n+1
+        n_rows = n*(1+padding)//2+1
         n_cols = self.Npix
         n_row_bins = n_rows//m_freq
         n_col_bins = n_cols//m_alpha
@@ -359,7 +363,7 @@ class Telescope1D:
             k0 = 2*np.pi/dist_max 
             print (f"Fundamental mode for chunk {i} is {k0}")
             ### here we divided by extra two becaused we padded with zeros
-            k_modes_unbinned.append(np.arange(n_row_bins)*k0/2) # In h/Mpc
+            k_modes_unbinned.append(np.arange(n_row_bins)*k0/(1+padding)) # In h/Mpc
         
         fig = plt.figure(figsize=(50,25))
         if log:
