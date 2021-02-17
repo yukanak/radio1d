@@ -312,7 +312,7 @@ class Telescope1D:
         '''
         return np.random.uniform(0,high,self.Npix)
 
-    def get_rmap_ps(self, rmap, Nfreqchunks=4, m_alpha = 2, m_freq = 2, vmin=None, vmax=None, log=True):
+    def get_rmap_ps(self, rmap, Nfreqchunks=4, m_alpha=2, m_freq=2, vmin=None, vmax=None, log=True):
         '''
         Get and plot the power spectrum for rmap.
         For just one full plot of the power spectrum, set Nfreqchunks as 1,
@@ -401,21 +401,19 @@ class Telescope1D:
         z2 = freq_21/freq2 - 1
         distance1 = cosmo.comoving_distance(z=z1).value * cosmo.h
         distance2 = cosmo.comoving_distance(z=z2).value * cosmo.h
-        print (z1,z2,distance1,distance2)
+        #print (z1,z2,distance1,distance2)
         return distance1-distance2
 
     def plot_rmap_ps_slice(self, rmap_ps_binned_no_error, rmap_ps_binned_with_error,
-                           fundamental_modes, last_modes,
+                           k_modes, alpha_binned,
                            alpha_idx_source, alpha_idx_no_source=[],
-                           chunk=0, m=2):
+                           chunk=0):
         '''
         Plot the power spectrum (of the specified chunk) returned by
         get_rmap_ps for a specific alpha.
-        The argument m is the same as the m in get_rmap_ps; it tells us how
-        we did the binning.
         '''
-        modes = np.arange(fundamental_modes[chunk], last_modes[chunk],
-                          step=(last_modes[chunk]-fundamental_modes[chunk])/len(rmap_ps_binned_no_error[chunk][:,0]))
+        modes = k_modes[chunk]
+        m = self.alpha.shape[0]//alpha_binned.shape[0]
         ax = plt.gca()
         for a in alpha_idx_source:
             alpha_idx_binned = a//m # Divide by the m argument of get_rmap_ps
