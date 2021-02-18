@@ -363,7 +363,8 @@ class Telescope1D:
             k0 = 2*np.pi/dist_max 
             print (f"Fundamental mode for chunk {i} is {k0}")
             ### here we divided by extra two becaused we padded with zeros
-            k_modes_unbinned.append(np.arange(n_row_bins)*k0/(1+padding)) # In h/Mpc
+            #k_modes_unbinned.append(np.arange(n_row_bins)*k0/(1+padding)) # In h/Mpc
+            k_modes_unbinned.append(np.arange(n_row_bins)*k0) # In h/Mpc
         
         fig = plt.figure(figsize=(50,25))
         if log:
