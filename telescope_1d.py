@@ -337,7 +337,7 @@ class Telescope1D:
             ps_chunk = np.abs(rfft(tofft,axis=0)**2)
             #print (tofft.shape,ps_chunk.shape)
             ps.append(ps_chunk)
-        
+
         # After getting the power spectra, bin in both x and y directions
         n_rows = n*(1+padding)//2+1
         n_cols = self.Npix
@@ -360,7 +360,9 @@ class Telescope1D:
             freq_last = self.freqs[(1+i)*n-1]
             # Get size of the chunk (dist_max) then the fundamental mode is 2*pi/dist_max
             dist_max = self.freq2distance(freq_first, freq_last)
-            k0 = 2*np.pi/dist_max 
+            #k0 = 2*np.pi/dist_max
+            # Scale k0 by m_freq/(1+padding), where m_freq is the downsampling and 1+padding is the upsampling factor
+            k0 = 2*np.pi/dist_max*m_freq/(1+padding)
             print (f"Fundamental mode for chunk {i} is {k0}")
             ### here we divided by extra two becaused we padded with zeros
             #k_modes_unbinned.append(np.arange(n_row_bins)*k0/(1+padding)) # In h/Mpc
