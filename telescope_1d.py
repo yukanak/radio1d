@@ -312,7 +312,7 @@ class Telescope1D:
         '''
         return np.random.uniform(0,high,self.Npix)
 
-    def get_rmap_ps(self, rmap, Nfreqchunks=4, m_alpha=2, m_freq=2, padding=1, vmin=None, vmax=None, log=True):
+    def get_rmap_ps(self, rmap, Nfreqchunks=4, m_alpha=2, m_freq=2, padding=1, window_fn = np.blackman, plot = False, vmin=None, vmax=None, log=True):
         '''
         Get and plot the power spectrum for rmap.
         For just one full plot of the power spectrum, set Nfreqchunks as 1,
@@ -329,7 +329,7 @@ class Telescope1D:
             #ps_chunk = np.zeros((n+1,self.Npix))
             #for j in range(self.Npix):
             #    ps_chunk[:,j] = np.abs(rfft(np.hstack((rmap[i*n:(1+i)*n,j],np.zeros(n))))**2)
-            tofft = rmap[i*n:(1+i)*n,:]*(np.hanning(n)[:,None])
+            tofft = rmap[i*n:(1+i)*n,:]*(window_fn(n)[:,None])
             if padding>0:
                 tofft = np.vstack((tofft,np.zeros((n*padding,self.Npix))))
             #plt.imshow(tofft,aspect='auto')
@@ -362,37 +362,35 @@ class Telescope1D:
             dist_max = self.freq2distance(freq_first, freq_last)
             #k0 = 2*np.pi/dist_max
             # Scale k0 by m_freq/(1+padding), where m_freq is the downsampling and 1+padding is the upsampling factor
-            k0 = 2*np.pi/dist_max*m_freq/(1+padding)
+            k0 = 2*np.pi/dist_max/(1+padding) ## for unbinned
             print (f"Fundamental mode for chunk {i} is {k0}")
-            ### here we divided by extra two becaused we padded with zeros
-            #k_modes_unbinned.append(np.arange(n_row_bins)*k0/(1+padding)) # In h/Mpc
-            k_modes_unbinned.append(np.arange(n_row_bins)*k0) # In h/Mpc
-        
-        fig = plt.figure(figsize=(50,25))
-        if log:
-            for i in range(Nfreqchunks):
-                plt.subplot(2,Nfreqchunks//2,i+1)
-                plt.imshow(ps_binned[i],origin='lower',aspect='auto',
-                           interpolation='nearest', norm=LogNorm(), vmin=vmin, vmax=vmax,
-                           extent=(self.alpha[0],self.alpha[-1],k_modes_unbinned[i][0],
-                           k_modes_unbinned[i][-1]))
-                plt.xlabel(r'sin($\theta$)')
-                plt.ylabel('[h/Mpc]')
-                plt.title(f'Frequency Chunk {i+1}')
-                plt.colorbar()
-        else:
-            for i in range(Nfreqchunks):
-                plt.subplot(2,Nfreqchunks//2,i+1)
-                plt.imshow(ps_binned[i],origin='lower',aspect='auto',
-                           interpolation='nearest', vmin=vmin, vmax=vmax,
-                           extent=(self.alpha[0],self.alpha[-1],k_modes_unbinned[i][0],
-                           k_modes_unbinned[i][-1]))
-                plt.xlabel(r'sin($\theta$)')
-                plt.ylabel('[h/Mpc]')
-                plt.title(f'Frequency Chunk {i+1}')
-                plt.colorbar()
-        fig.subplots_adjust(wspace=0, hspace=0.1, top=0.95)
-        plt.show()
+            k_modes_unbinned.append(np.arange(n_row_bins*m_freq)*k0) # In h/Mpc
+        if plot:    
+            fig = plt.figure(figsize=(50,25))
+            if log:
+                for i in range(Nfreqchunks):
+                    plt.subplot(2,Nfreqchunks//2,i+1)
+                    plt.imshow(ps_binned[i],origin='lower',aspect='auto',
+                               interpolation='nearest', norm=LogNorm(), vmin=vmin, vmax=vmax,
+                               extent=(self.alpha[0],self.alpha[-1],k_modes_unbinned[i][0],
+                               k_modes_unbinned[i][-1]))
+                    plt.xlabel(r'sin($\theta$)')
+                    plt.ylabel('[h/Mpc]')
+                    plt.title(f'Frequency Chunk {i+1}')
+                    plt.colorbar()
+            else:
+                for i in range(Nfreqchunks):
+                    plt.subplot(2,Nfreqchunks//2,i+1)
+                    plt.imshow(ps_binned[i],origin='lower',aspect='auto',
+                               interpolation='nearest', vmin=vmin, vmax=vmax,
+                               extent=(self.alpha[0],self.alpha[-1],k_modes_unbinned[i][0],
+                               k_modes_unbinned[i][-1]))
+                    plt.xlabel(r'sin($\theta$)')
+                    plt.ylabel('[h/Mpc]')
+                    plt.title(f'Frequency Chunk {i+1}')
+                    plt.colorbar()
+            fig.subplots_adjust(wspace=0, hspace=0.1, top=0.95)
+            plt.show()
         k_modes = [ ks[:n_row_bins*m_freq].reshape((n_row_bins,-1)).mean(axis=1) for ks in k_modes_unbinned]
         alpha_binned = self.alpha[:m_alpha*n_col_bins].reshape((n_col_bins,-1)).mean(axis=1)
         return (ps_binned, k_modes, alpha_binned)
