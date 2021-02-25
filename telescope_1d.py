@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from numpy.fft import rfft,irfft
+from scipy.ndimage import gaussian_filter
 from matplotlib.colors import LogNorm
 from itertools import combinations
 from astropy.cosmology import Planck15 as cosmo
@@ -125,20 +126,22 @@ class Telescope1D:
             # Getting uvplane for one frequency bin
             for ii, idx_val in enumerate(indices):
                 # Looping through every element of indices
-                val1 = uv[np.floor(idx_val).astype(int)]
-                val2 = uv[np.ceil(idx_val).astype(int)]
-                # If the idx_val is 1.2, we'd do 0.2*(uv[2]-uv[1]) + uv[1]
-                val = (idx_val%1) * (val2-val1) + val1
-                uvplane[ii] = val
-        elif indices.ndim == 2:
-            for ii, idx_vals in enumerate(indices):
-                for jj, idx_val in enumerate(idx_vals):
-                    # Looping through every element of indices
+                if np.ceil(idx_val).astype(int) < len(uv):
                     val1 = uv[np.floor(idx_val).astype(int)]
                     val2 = uv[np.ceil(idx_val).astype(int)]
                     # If the idx_val is 1.2, we'd do 0.2*(uv[2]-uv[1]) + uv[1]
                     val = (idx_val%1) * (val2-val1) + val1
-                    uvplane[ii,jj] = val
+                    uvplane[ii] = val
+        elif indices.ndim == 2:
+            for ii, idx_vals in enumerate(indices):
+                for jj, idx_val in enumerate(idx_vals):
+                    # Looping through every element of indices
+                    if np.ceil(idx_val).astype(int) < len(uv):
+                        val1 = uv[np.floor(idx_val).astype(int)]
+                        val2 = uv[np.ceil(idx_val).astype(int)]
+                        # If the idx_val is 1.2, we'd do 0.2*(uv[2]-uv[1]) + uv[1]
+                        val = (idx_val%1) * (val2-val1) + val1
+                        uvplane[ii,jj] = val
         return uvplane
 
     def get_obs_uvplane(self, uvplane, time_error_sigma=10e-12):
@@ -193,7 +196,9 @@ class Telescope1D:
             else:
                 uvplane_obs = uvplane
             uvi = self.empty_uv()
-            uvi[indices[i,:]] = uvplane_obs[i,:]
+            for ii, ind in enumerate(indices[i,:]):
+                if ind < len(uvi):
+                    uvi[ind] = uvplane_obs[i,ii]
             rmap_obs.append(self.uv2image(uvi))
         rmap_obs = np.array(rmap_obs)
         return rmap_obs
@@ -300,11 +305,22 @@ class Telescope1D:
             image[idx[i]] = 1
         return image
 
-    def get_gaussian_sky(self, sigma):
+    def get_gaussian_sky(self, mean=1, sigma_o=0.5, sigma_f=40):
         '''
-        Get a Gaussian sky with the specified sigma.
+        Get a correlated Gaussian sky with the specified mean, sigma_o, and
+        sigma_f.
         '''
-        return np.random.normal(0,sigma,self.Npix)
+        g = np.random.normal(mean,sigma_o,self.Npix)
+        g = gaussian_filter(g,sigma=sigma_f)
+        return g
+
+    def get_poisson_sky(self, lam=1, sigma_f=40):
+        '''
+        Get Poisson sky.
+        '''
+        p = np.random.poisson(lam=lam, size=self.Npix).astype(float)
+        p = gaussian_filter(p,sigma=sigma_f)
+        return p
 
     def get_uniform_sky(self, high=1):
         '''
@@ -412,44 +428,52 @@ class Telescope1D:
     def plot_rmap_ps_slice(self, rmap_ps_binned_no_error, rmap_ps_binned_with_error,
                            k_modes, alpha_binned,
                            alpha_idx_source, alpha_idx_no_source=[],
-                           chunk=0):
+                           Nfreqchunks=4, plot=False):
         '''
         Plot the power spectrum (of the specified chunk) returned by
         get_rmap_ps for a specific alpha.
         '''
-        modes = k_modes[chunk]
-        m = self.alpha.shape[0]//alpha_binned.shape[0]
-        ax = plt.gca()
-        for a in alpha_idx_source:
-            alpha_idx_binned = a//m # Divide by the m argument of get_rmap_ps
-            alpha = self.alpha[a]
-            color = next(ax._get_lines.prop_cycler)['color']
-            plt.loglog(modes, rmap_ps_binned_no_error[chunk][:,alpha_idx_binned],
-                       linestyle=':', color=color, label=fr'$\alpha$ = {alpha} (source, no noise)')
-            plt.loglog(modes, rmap_ps_binned_with_error[chunk][:,alpha_idx_binned],
-                       linestyle='-', color=color, label=fr'$\alpha$ = {alpha} (source, with noise)')
-        if not alpha_idx_no_source:
-            alpha_idx_no_source.append(self.Npix_fft//2)
-            alpha_idx_no_source.append(self.Npix_fft//2+10)
+        #fig = plt.figure(figsize=(50,12))
+        fig = plt.figure(figsize=(50,12))
+        for i in range(Nfreqchunks):
+            plt.subplot(2,Nfreqchunks//2,i+1)
+            modes = k_modes[i]
+            m = self.alpha.shape[0]//alpha_binned.shape[0]
+            ax = plt.gca()
             for a in alpha_idx_source:
-                if a+10<=self.Npix_fft:
-                    alpha_idx_no_source.append(a+5)
-                if a-10>=0:
-                    alpha_idx_no_source.append(a-5)
-                if a+25<=self.Npix_fft:
-                    alpha_idx_no_source.append(a+25)
-                if a-25>=0:
-                    alpha_idx_no_source.append(a-25)
-        for a in alpha_idx_no_source:
-            alpha_idx_binned = a//m # Divide by the m argument of get_rmap_ps
-            alpha = self.alpha[a]
-            color = next(ax._get_lines.prop_cycler)['color']
-            plt.loglog(modes, rmap_ps_binned_no_error[chunk][:,alpha_idx_binned],
-                       linestyle=':', color=color, label=fr'$\alpha$ = {alpha} (no noise)')
-            plt.loglog(modes, rmap_ps_binned_with_error[chunk][:,alpha_idx_binned],
-                       linestyle='-', color=color, label=fr'$\alpha$ = {alpha} (with noise)')
-        plt.xlabel('modes [h/Mpc]')
-        plt.ylabel('power spectrum')
+                alpha_idx_binned = a//m # Divide by the m argument of get_rmap_ps
+                alpha = self.alpha[a]
+                color = next(ax._get_lines.prop_cycler)['color']
+                plt.loglog(modes, rmap_ps_binned_no_error[i][:,alpha_idx_binned]/rmap_ps_binned_no_error[i][0,alpha_idx_binned],
+                           linestyle=':', color=color, label=fr'$\alpha$ = {alpha} (source, no noise)')
+                plt.loglog(modes, rmap_ps_binned_with_error[i][:,alpha_idx_binned]/rmap_ps_binned_with_error[i][0,alpha_idx_binned],
+                           linestyle='-', color=color, label=fr'$\alpha$ = {alpha} (source, with noise)')
+            if not alpha_idx_no_source:
+                alpha_idx_no_source.append(self.Npix_fft//2)
+                alpha_idx_no_source.append(self.Npix_fft//2+10)
+                for a in alpha_idx_source:
+                    if a+10<=self.Npix_fft:
+                        alpha_idx_no_source.append(a+5)
+                    if a-10>=0:
+                        alpha_idx_no_source.append(a-5)
+                    if a+25<=self.Npix_fft:
+                        alpha_idx_no_source.append(a+25)
+                    if a-25>=0:
+                        alpha_idx_no_source.append(a-25)
+            for a in alpha_idx_no_source:
+                alpha_idx_binned = a//m # Divide by the m argument of get_rmap_ps
+                alpha = self.alpha[a]
+                color = next(ax._get_lines.prop_cycler)['color']
+                plt.loglog(modes, rmap_ps_binned_no_error[i][:,alpha_idx_binned]/rmap_ps_binned_no_error[i][0,alpha_idx_binned],
+                           linestyle=':', color=color, label=fr'$\alpha$ = {alpha} (no noise)')
+                plt.loglog(modes, rmap_ps_binned_with_error[i][:,alpha_idx_binned]/rmap_ps_binned_with_error[i][0,alpha_idx_binned],
+                           linestyle='-', color=color, label=fr'$\alpha$ = {alpha} (with noise)')
+            plt.xlabel('modes [h/Mpc]')
+            plt.ylabel('power spectrum')
+            plt.title(f'frequency chunk {i+1}')
+        fig.subplots_adjust(wspace=0.1, hspace=0.2, top=0.95, right=0.55)
         plt.legend(bbox_to_anchor=(1.04,1), loc="upper left")
         plt.title('rmap power spectrum')
-        plt.show()
+        if plot:
+            plt.show()
+        return fig
