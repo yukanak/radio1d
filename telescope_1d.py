@@ -434,7 +434,7 @@ class Telescope1D:
         get_rmap_ps for a specific alpha.
         '''
         #fig = plt.figure(figsize=(50,12))
-        fig = plt.figure(figsize=(50,12))
+        fig = plt.figure(figsize=(15,10))
         for i in range(Nfreqchunks):
             plt.subplot(2,Nfreqchunks//2,i+1)
             modes = k_modes[i]
@@ -471,7 +471,7 @@ class Telescope1D:
             plt.xlabel('modes [h/Mpc]')
             plt.ylabel('power spectrum')
             plt.title(f'frequency chunk {i+1}')
-        fig.subplots_adjust(wspace=0.1, hspace=0.2, top=0.95, right=0.55)
+        fig.subplots_adjust(wspace=0.2, hspace=0.2, top=0.95, right=0.75)
         plt.legend(bbox_to_anchor=(1.04,1), loc="upper left")
         plt.title('rmap power spectrum')
         if plot:
