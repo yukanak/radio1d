@@ -379,7 +379,7 @@ class Telescope1D:
             #k0 = 2*np.pi/dist_max
             # Scale k0 by m_freq/(1+padding), where m_freq is the downsampling and 1+padding is the upsampling factor
             k0 = 2*np.pi/dist_max/(1+padding) ## for unbinned
-            print (f"Fundamental mode for chunk {i} is {k0}")
+            #print (f"Fundamental mode for chunk {i} is {k0}")
             k_modes_unbinned.append(np.arange(n_row_bins*m_freq)*k0) # In h/Mpc
         if plot:    
             fig = plt.figure(figsize=(50,25))
@@ -471,9 +471,9 @@ class Telescope1D:
             plt.xlabel('modes [h/Mpc]')
             plt.ylabel('power spectrum')
             plt.title(f'frequency chunk {i+1}')
-        fig.subplots_adjust(wspace=0.2, hspace=0.2, top=0.95, right=0.75)
+        fig.subplots_adjust(wspace=0.2, hspace=0.2, top=0.9, right=0.75)
         plt.legend(bbox_to_anchor=(1.04,1), loc="upper left")
-        plt.title('rmap power spectrum')
+        plt.suptitle('rmap power spectrum')
         if plot:
             plt.show()
         return fig
