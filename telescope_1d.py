@@ -144,11 +144,25 @@ class Telescope1D:
                         uvplane[ii,jj] = val
         return uvplane
 
-    def get_obs_uvplane(self, uvplane, time_error_sigma=10e-12):
+    def get_time_errors(self, time_error_sigma=10e-12, seed=0):
+        np.random.seed(seed)
+        cov = np.zeros((self.Ndishes,self.Ndishes))
+        for i in range(self.Ndishes):
+            for j in range(self.Ndishes):
+                if i==j:
+                    cov[i,j] = time_error_sigma**2
+                else:
+                    baseline_distance = np.abs(self.dish_locations[j]-self.dish_locations[i]).astype(float)
+                    cov[i,j] = time_error_sigma**2/np.sqrt(baseline_distance/self.DDish)
+        mean = np.zeros(self.Ndishes)
+        time_errors = np.random.multivariate_normal(mean,cov)
+        return time_errors
+
+    def get_obs_uvplane(self, uvplane, time_error_sigma=10e-12, seed=0):
         '''
         Get the uvplane with time error.
         '''
-        time_errors = np.random.normal(0,time_error_sigma,self.Ndishes)
+        time_errors = self.get_time_errors(time_error_sigma, seed)
         uvplane_obs = np.zeros_like(uvplane, np.complex)
         for i, f in enumerate(self.freqs):
             phase_errors = time_errors*f*1e6*2*np.pi
@@ -166,7 +180,7 @@ class Telescope1D:
                 uvplane_obs[i,j] = np.mean(uvplane_j, axis=0)
         return uvplane_obs
 
-    def get_obs_rmap(self, uvplane, time_error_sigma=10e-12):
+    def get_obs_rmap(self, uvplane, time_error_sigma=10e-12, seed=0):
         '''
         Get the rmap observed by the telescope array.
         For no time/phase error, do time_error_sigma = 0 seconds.
@@ -176,7 +190,7 @@ class Telescope1D:
         rmap_obs = []
         if time_error_sigma > 0:
             # Add time errors; each antenna's error sampled from Gaussian
-            time_errors = np.random.normal(0,time_error_sigma,self.Ndishes)
+            time_errors = self.get_time_errors(time_error_sigma, seed)
         uvplane_obs = np.zeros_like(uvplane, np.complex)
         for i, f in enumerate(self.freqs):
             if time_error_sigma > 0:
@@ -436,6 +450,8 @@ class Telescope1D:
         #fig = plt.figure(figsize=(50,12))
         fig = plt.figure(figsize=(15,10))
         for i in range(Nfreqchunks):
+            max_no_error = np.max(rmap_ps_binned_no_error[i])
+            max_with_error = np.max(rmap_ps_binned_with_error[i])
             plt.subplot(2,Nfreqchunks//2,i+1)
             modes = k_modes[i]
             m = self.alpha.shape[0]//alpha_binned.shape[0]
@@ -444,9 +460,9 @@ class Telescope1D:
                 alpha_idx_binned = a//m # Divide by the m argument of get_rmap_ps
                 alpha = self.alpha[a]
                 color = next(ax._get_lines.prop_cycler)['color']
-                plt.loglog(modes, rmap_ps_binned_no_error[i][:,alpha_idx_binned]/rmap_ps_binned_no_error[i][0,alpha_idx_binned],
+                plt.loglog(modes, rmap_ps_binned_no_error[i][:,alpha_idx_binned]/max_no_error,
                            linestyle=':', color=color, label=fr'$\alpha$ = {alpha} (source, no noise)')
-                plt.loglog(modes, rmap_ps_binned_with_error[i][:,alpha_idx_binned]/rmap_ps_binned_with_error[i][0,alpha_idx_binned],
+                plt.loglog(modes, rmap_ps_binned_with_error[i][:,alpha_idx_binned]/max_with_error,
                            linestyle='-', color=color, label=fr'$\alpha$ = {alpha} (source, with noise)')
             if not alpha_idx_no_source:
                 alpha_idx_no_source.append(self.Npix_fft//2)
@@ -464,12 +480,16 @@ class Telescope1D:
                 alpha_idx_binned = a//m # Divide by the m argument of get_rmap_ps
                 alpha = self.alpha[a]
                 color = next(ax._get_lines.prop_cycler)['color']
-                plt.loglog(modes, rmap_ps_binned_no_error[i][:,alpha_idx_binned]/rmap_ps_binned_no_error[i][0,alpha_idx_binned],
+                plt.loglog(modes, rmap_ps_binned_no_error[i][:,alpha_idx_binned]/max_no_error,
                            linestyle=':', color=color, label=fr'$\alpha$ = {alpha} (no noise)')
-                plt.loglog(modes, rmap_ps_binned_with_error[i][:,alpha_idx_binned]/rmap_ps_binned_with_error[i][0,alpha_idx_binned],
+                plt.loglog(modes, rmap_ps_binned_with_error[i][:,alpha_idx_binned]/max_with_error,
                            linestyle='-', color=color, label=fr'$\alpha$ = {alpha} (with noise)')
+            line = np.array([1e-6 for i in range(len(modes))])
+            color = next(ax._get_lines.prop_cycler)['color']
+            plt.loglog(modes, line, linestyle='-.', color=color)
             plt.xlabel('modes [h/Mpc]')
             plt.ylabel('power spectrum')
+            plt.ylim(1e-11, 1)
             plt.title(f'frequency chunk {i+1}')
         fig.subplots_adjust(wspace=0.2, hspace=0.2, top=0.9, right=0.75)
         plt.legend(bbox_to_anchor=(1.04,1), loc="upper left")
