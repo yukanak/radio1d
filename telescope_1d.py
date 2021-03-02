@@ -406,7 +406,7 @@ class Telescope1D:
                                k_modes_unbinned[i][-1]))
                     plt.xlabel(r'sin($\theta$)')
                     plt.ylabel('[h/Mpc]')
-                    plt.title(f'Frequency Chunk {i+1}')
+                    plt.title('Frequency Chunk {}'.format(i+1))
                     plt.colorbar()
             else:
                 for i in range(Nfreqchunks):
@@ -417,7 +417,7 @@ class Telescope1D:
                                k_modes_unbinned[i][-1]))
                     plt.xlabel(r'sin($\theta$)')
                     plt.ylabel('[h/Mpc]')
-                    plt.title(f'Frequency Chunk {i+1}')
+                    plt.title('Frequency Chunk {}'.format(i+1))
                     plt.colorbar()
             fig.subplots_adjust(wspace=0, hspace=0.1, top=0.95)
             plt.show()
@@ -490,7 +490,7 @@ class Telescope1D:
             plt.xlabel('modes [h/Mpc]')
             plt.ylabel('power spectrum')
             plt.ylim(1e-11, 1)
-            plt.title(f'frequency chunk {i+1}')
+            plt.title('frequency chunk {}'.format(i+1))
         fig.subplots_adjust(wspace=0.2, hspace=0.2, top=0.9, right=0.75)
         plt.legend(bbox_to_anchor=(1.04,1), loc="upper left")
         plt.suptitle('rmap power spectrum')

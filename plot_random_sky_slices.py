@@ -7,7 +7,7 @@ from matplotlib.colors import LogNorm
 from itertools import combinations
 from astropy.cosmology import Planck15 as cosmo
 import telescope_1d
-import os
+import os, sys
 
 def plot_random_sky_slices(npix, redundant, sky, error):
     Ndishes_array = [32, 64, 128]
@@ -28,16 +28,18 @@ def plot_random_sky_slices(npix, redundant, sky, error):
         (ps_binned_with_error, k_modes_with_error, alpha_binned_with_error) = t.get_rmap_ps(rmap_with_error, Nfreqchunks=4, m_alpha=2, m_freq=2, padding=1, window_fn=np.blackman)
         f = t.plot_rmap_ps_slice(ps_binned_no_error, ps_binned_with_error, k_modes_no_error, alpha_binned_no_error, alpha_idx_source=[], 
                                  alpha_idx_no_source=[t.Npix//2, t.Npix//2+t.Npix//400, t.Npix//2+t.Npix//150, t.Npix//2+t.Npix//80], Nfreqchunks=4)
-        path = os.path.join(os.environ['HOME'], f'public_html/figs/npix_{npix}_ndish_{ndishes}_redundant_{redundant}_sky_{sky}_error_{error}.png')
-        f.savefigs(path)
+        path = os.path.join(os.environ['HOME'], 'public_html/figs/npix_{npix}_ndish_{ndishes}_redundant_{redundant}_sky_{sky}_error_{error}.png'.format(npix=npix, ndishes=ndishes, redundant=redundant, sky=sky, error=error)
+        f.savefig(path)
         plt.close(f)
 
 if __name__ == '__main__': 
     # ./plot_random_sky_slices.py 4086 False uniform 300e-12
     # Results in sys.argv[1] = 4086, etc.
+    print(sys.version)
     if len(sys.argv) < 5:
-        print(f"Usage: {sys.argv[0]} npix redundant sky error")
+        print("Usage: {} npix redundant sky error".format(sys.argv[0]))
         sys.exit(1)
+    sys.exit(0)
     npix = int(sys.argv[1])
     redundant = eval(sys.argv[2])
     sky = str(sys.argv[3])
