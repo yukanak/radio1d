@@ -144,16 +144,21 @@ class Telescope1D:
                         uvplane[ii,jj] = val
         return uvplane
 
-    def get_time_errors(self, time_error_sigma=10e-12, seed=0):
+    def get_time_errors(self, time_error_sigma=10e-12, seed=0, r0=None):
+        '''
+        Make r0 bigger to make more correlated.
+        '''
         np.random.seed(seed)
         cov = np.zeros((self.Ndishes,self.Ndishes))
+        if r0 is None:
+            r0 = self.DDish
         for i in range(self.Ndishes):
             for j in range(self.Ndishes):
                 if i==j:
                     cov[i,j] = time_error_sigma**2
                 else:
                     baseline_distance = np.abs(self.dish_locations[j]-self.dish_locations[i]).astype(float)
-                    cov[i,j] = time_error_sigma**2/np.sqrt(baseline_distance/self.DDish)
+                    cov[i,j] = time_error_sigma**2/np.sqrt(baseline_distance/r0)
         mean = np.zeros(self.Ndishes)
         time_errors = np.random.multivariate_normal(mean,cov)
         return time_errors
