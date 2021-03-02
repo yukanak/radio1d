@@ -37,9 +37,18 @@ if __name__ == '__main__':
     # Results in sys.argv[1] = 4086, etc.
     print(sys.version)
     if len(sys.argv) < 5:
-        print("Usage: {} npix redundant sky error".format(sys.argv[0]))
-        sys.exit(1)
-    sys.exit(0)
+        #print("Usage: {} npix redundant sky error".format(sys.argv[0]))
+        #sys.exit(1)
+        Npix_array = [2**11, 2**12, 2**13]
+        redundant_array = [True, False]
+        sky_array = ['uniform', 'poisson', 'gaussian']
+        time_error_array = [1e-12, 10e-12, 100e-12, 300e-12, 1e-9]
+        for npix in Npix_array:
+            for redundant in redundant_array:
+                for sky in sky_array:
+                    for error in time_error_array:
+                        plot_random_sky_slices(npix, redundant, sky, error)
+        sys.exit(0)
     npix = int(sys.argv[1])
     redundant = eval(sys.argv[2])
     sky = str(sys.argv[3])
