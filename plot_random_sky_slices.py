@@ -12,11 +12,12 @@ import telescope_1d
 import os, sys
 
 def plot_random_sky_slices(npix, redundant, sky, seed, error, correlated):
+    #breakpoint()
     Ndishes_array = [32, 64, 128]
     for ndishes in Ndishes_array:
         # Check if the image already exists
-        path = os.path.join(os.environ['HOME'], 'public_html/figs/npix_{npix}_ndish_{ndishes}_redundant_{redundant}_sky_{sky}_seed_{seed}_error_{error}_correlated_{correlated}.png'.format(npix=npix, ndishes=ndishes, redundant=redundant, sky=sky, seed=seed, error=error, correlated=correlated))
-        #path = '../20210225_random_sky_slices/figs/npix_{npix}_ndish_{ndishes}_redundant_{redundant}_sky_{sky}_seed_{seed}_error_{error}_correlated_{correlated}.png'.format(npix=npix, ndishes=ndishes, redundant=redundant, sky=sky, seed=seed, error=error, correlated=correlated)
+        #path = os.path.join(os.environ['HOME'], 'public_html/figs/npix_{npix}_ndish_{ndishes}_redundant_{redundant}_sky_{sky}_seed_{seed}_error_{error}_correlated_{correlated}.png'.format(npix=npix, ndishes=ndishes, redundant=redundant, sky=sky, seed=seed, error=error, correlated=correlated))
+        path = '../20210225_random_sky_slices/figs/npix_{npix}_ndish_{ndishes}_redundant_{redundant}_sky_{sky}_seed_{seed}_error_{error}_correlated_{correlated}.png'.format(npix=npix, ndishes=ndishes, redundant=redundant, sky=sky, seed=seed, error=error, correlated=correlated)
         if os.path.isfile(path):
             continue
         t = telescope_1d.Telescope1D(Nfreq=256, Ndishes=ndishes, DDish=6, Npix_fft=npix, Npad=2**8,
@@ -79,8 +80,8 @@ def plot_random_sky_slices(npix, redundant, sky, seed, error, correlated):
         plt.close(f)
 
 if __name__ == '__main__': 
-    # ./plot_random_sky_slices.py 4086 False uniform 0 300e-12 True
-    # Results in sys.argv[1] = 4086, etc.
+    # ./plot_random_sky_slices.py 4096 False 'uniform' 0 300e-12 True
+    # Results in sys.argv[1] = 4096, etc.
     print(sys.version)
     if len(sys.argv) < 7:
         #print("Usage: {} npix redundant sky error".format(sys.argv[0]))
