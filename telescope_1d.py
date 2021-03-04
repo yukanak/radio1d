@@ -516,6 +516,8 @@ class Telescope1D:
                 ax1.loglog(modes, difference_ps_binned[i][:,(self.Npix//2)//m], color=next(ax._get_lines.prop_cycler)['color'], linestyle='--', label="ps of (rmap with noise - rmap no noise)\n" r"for $\alpha$ = 0")
             ax1.grid()
         fig.subplots_adjust(wspace=0.2, hspace=0.3, top=0.93, right=0.75)
+        ax = plt.subplot(gs[ncol-1])
+        ax1 = plt.subplot(gs[2*ncol-1])
         ax.legend(bbox_to_anchor=(1.04,1), loc="upper left")
         ax1.legend(bbox_to_anchor=(1.04,1), loc="upper left")
         plt.suptitle('rmap power spectrum')
