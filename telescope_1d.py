@@ -1,7 +1,8 @@
 import numpy as np
 import matplotlib
-matplotlib.use('Agg')
+#matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from matplotlib import gridspec
 from numpy.fft import rfft,irfft
 from scipy.ndimage import gaussian_filter
 from matplotlib.colors import LogNorm
@@ -10,7 +11,7 @@ from astropy.cosmology import Planck15 as cosmo
 
 class Telescope1D:
     def __init__(self, Nfreq=256, Ndishes=32, DDish=6, Npix_fft=2**12, Npad=2**8,
-                 minfreq=400, maxfreq=800, redundant=False):
+                 minfreq=400, maxfreq=800, redundant=False, seed=0):
         '''
         DDish is the diameter of the dishes in meters.
         The minfreq, maxfreq should be in MHz.
@@ -28,6 +29,7 @@ class Telescope1D:
 
         # If redundant = True, the distance between consecutive dishes is DDish
         dish_locations = np.arange(0,Ndishes,dtype=float)
+        np.random.seed(seed)
         for ii in np.arange(1,Ndishes):
             if redundant:
                 distance = DDish # This makes redundant array
@@ -146,30 +148,33 @@ class Telescope1D:
                         uvplane[ii,jj] = val
         return uvplane
 
-    def get_time_errors(self, time_error_sigma=10e-12, seed=0, r0=None):
+    def get_time_errors(self, time_error_sigma=10e-12, correlated=True, seed=0, r0=None):
         '''
         Make r0 bigger to make more correlated.
         '''
         np.random.seed(seed)
-        cov = np.zeros((self.Ndishes,self.Ndishes))
-        if r0 is None:
-            r0 = self.DDish
-        for i in range(self.Ndishes):
-            for j in range(self.Ndishes):
-                if i==j:
-                    cov[i,j] = time_error_sigma**2
-                else:
-                    baseline_distance = np.abs(self.dish_locations[j]-self.dish_locations[i]).astype(float)
-                    cov[i,j] = time_error_sigma**2/np.sqrt(baseline_distance/r0)
-        mean = np.zeros(self.Ndishes)
-        time_errors = np.random.multivariate_normal(mean,cov)
+        if correlated:
+            cov = np.zeros((self.Ndishes,self.Ndishes))
+            if r0 is None:
+                r0 = self.DDish
+            for i in range(self.Ndishes):
+                for j in range(self.Ndishes):
+                    if i==j:
+                        cov[i,j] = time_error_sigma**2
+                    else:
+                        baseline_distance = np.abs(self.dish_locations[j]-self.dish_locations[i]).astype(float)
+                        cov[i,j] = time_error_sigma**2/np.sqrt(baseline_distance/r0)
+            mean = np.zeros(self.Ndishes)
+            time_errors = np.random.multivariate_normal(mean,cov)
+        else:
+            time_errors = np.random.normal(0,time_error_sigma,self.Ndishes)
         return time_errors
 
-    def get_obs_uvplane(self, uvplane, time_error_sigma=10e-12, seed=0):
+    def get_obs_uvplane(self, uvplane, time_error_sigma=10e-12, correlated=True, seed=0):
         '''
         Get the uvplane with time error.
         '''
-        time_errors = self.get_time_errors(time_error_sigma, seed)
+        time_errors = self.get_time_errors(time_error_sigma=time_error_sigma, correlated=correlated, seed=seed)
         uvplane_obs = np.zeros_like(uvplane, np.complex)
         for i, f in enumerate(self.freqs):
             phase_errors = time_errors*f*1e6*2*np.pi
@@ -187,7 +192,7 @@ class Telescope1D:
                 uvplane_obs[i,j] = np.mean(uvplane_j, axis=0)
         return uvplane_obs
 
-    def get_obs_rmap(self, uvplane, time_error_sigma=10e-12, seed=0):
+    def get_obs_rmap(self, uvplane, time_error_sigma=10e-12, correlated=True, seed=0):
         '''
         Get the rmap observed by the telescope array.
         For no time/phase error, do time_error_sigma = 0 seconds.
@@ -197,7 +202,7 @@ class Telescope1D:
         rmap_obs = []
         if time_error_sigma > 0:
             # Add time errors; each antenna's error sampled from Gaussian
-            time_errors = self.get_time_errors(time_error_sigma, seed)
+            time_errors = self.get_time_errors(time_error_sigma, correlated, seed)
         uvplane_obs = np.zeros_like(uvplane, np.complex)
         for i, f in enumerate(self.freqs):
             if time_error_sigma > 0:
@@ -326,27 +331,30 @@ class Telescope1D:
             image[idx[i]] = 1
         return image
 
-    def get_gaussian_sky(self, mean=1, sigma_o=0.5, sigma_f=40):
+    def get_gaussian_sky(self, mean=1, sigma_o=0.5, sigma_f=60, seed=0):
         '''
         Get a correlated Gaussian sky with the specified mean, sigma_o, and
         sigma_f.
         '''
+        np.random.seed(seed)
         g = np.random.normal(mean,sigma_o,self.Npix)
         g = gaussian_filter(g,sigma=sigma_f)
         return g
 
-    def get_poisson_sky(self, lam=1, sigma_f=40):
+    def get_poisson_sky(self, lam=0.01, seed=0):
         '''
         Get Poisson sky.
         '''
+        np.random.seed(seed)
         p = np.random.poisson(lam=lam, size=self.Npix).astype(float)
-        p = gaussian_filter(p,sigma=sigma_f)
+        p = p * 100
         return p
 
-    def get_uniform_sky(self, high=1):
+    def get_uniform_sky(self, high=1, seed=0):
         '''
         Get a uniform random sky from 0 to high.
         '''
+        np.random.seed(seed)
         return np.random.uniform(0,high,self.Npix)
 
     def get_rmap_ps(self, rmap, Nfreqchunks=4, m_alpha=2, m_freq=2, padding=1, window_fn = np.blackman, plot = False, vmin=None, vmax=None, log=True):
@@ -449,27 +457,28 @@ class Telescope1D:
     def plot_rmap_ps_slice(self, rmap_ps_binned_no_error, rmap_ps_binned_with_error,
                            k_modes, alpha_binned,
                            alpha_idx_source, alpha_idx_no_source=[],
-                           Nfreqchunks=4, plot=False):
+                           Nfreqchunks=4, plot=False, difference_ps_binned=None):
         '''
         Plot the power spectrum (of the specified chunk) returned by
         get_rmap_ps for a specific alpha.
         '''
         #fig = plt.figure(figsize=(50,12))
-        fig = plt.figure(figsize=(15,10))
+        fig = plt.figure(figsize=(15,15))
+        gs = gridspec.GridSpec(4, Nfreqchunks//2, height_ratios=[4, 1, 4, 1])
         for i in range(Nfreqchunks):
             max_no_error = np.max(rmap_ps_binned_no_error[i])
             max_with_error = np.max(rmap_ps_binned_with_error[i])
-            plt.subplot(2,Nfreqchunks//2,i+1)
+            ncol = Nfreqchunks//2
+            ax = plt.subplot(gs[i%ncol+(i//ncol)*(ncol*2)])
             modes = k_modes[i]
             m = self.alpha.shape[0]//alpha_binned.shape[0]
-            ax = plt.gca()
             for a in alpha_idx_source:
                 alpha_idx_binned = a//m # Divide by the m argument of get_rmap_ps
                 alpha = self.alpha[a]
                 color = next(ax._get_lines.prop_cycler)['color']
-                plt.loglog(modes, rmap_ps_binned_no_error[i][:,alpha_idx_binned]/max_no_error,
+                ax.loglog(modes, rmap_ps_binned_no_error[i][:,alpha_idx_binned]/max_no_error,
                            linestyle=':', color=color, label=fr'$\alpha$ = {alpha} (source, no noise)')
-                plt.loglog(modes, rmap_ps_binned_with_error[i][:,alpha_idx_binned]/max_with_error,
+                ax.loglog(modes, rmap_ps_binned_with_error[i][:,alpha_idx_binned]/max_with_error,
                            linestyle='-', color=color, label=fr'$\alpha$ = {alpha} (source, with noise)')
             if not alpha_idx_no_source:
                 alpha_idx_no_source.append(self.Npix_fft//2)
@@ -487,19 +496,28 @@ class Telescope1D:
                 alpha_idx_binned = a//m # Divide by the m argument of get_rmap_ps
                 alpha = self.alpha[a]
                 color = next(ax._get_lines.prop_cycler)['color']
-                plt.loglog(modes, rmap_ps_binned_no_error[i][:,alpha_idx_binned]/max_no_error,
+                ax.loglog(modes, rmap_ps_binned_no_error[i][:,alpha_idx_binned]/max_no_error,
                            linestyle=':', color=color, label=fr'$\alpha$ = {alpha} (no noise)')
-                plt.loglog(modes, rmap_ps_binned_with_error[i][:,alpha_idx_binned]/max_with_error,
+                ax.loglog(modes, rmap_ps_binned_with_error[i][:,alpha_idx_binned]/max_with_error,
                            linestyle='-', color=color, label=fr'$\alpha$ = {alpha} (with noise)')
+            # Add line at 1e-6
             line = np.array([1e-6 for i in range(len(modes))])
             color = next(ax._get_lines.prop_cycler)['color']
-            plt.loglog(modes, line, linestyle='-.', color=color)
-            plt.xlabel('modes [h/Mpc]')
-            plt.ylabel('power spectrum')
-            plt.ylim(1e-11, 1)
-            plt.title('frequency chunk {}'.format(i+1))
-        fig.subplots_adjust(wspace=0.2, hspace=0.2, top=0.9, right=0.75)
-        plt.legend(bbox_to_anchor=(1.04,1), loc="upper left")
+            ax.loglog(modes, line, linestyle='-.', color=color)
+            ax.set_xlabel('modes [h/Mpc]')
+            ax.set_ylabel('power spectrum')
+            ax.set_ylim(1e-11, 1)
+            ax.set_title('frequency chunk {}'.format(i+1))
+            # Plot the differences (errors - no errors)
+            ax1 = plt.subplot(gs[i%ncol+(i//ncol)*(ncol*2)+ncol])
+            ax1.loglog(modes, rmap_ps_binned_with_error[i][:,(self.Npix//2)//m]/max_with_error - rmap_ps_binned_no_error[i][:,(self.Npix//2)//m]/max_no_error,
+                    color=next(ax._get_lines.prop_cycler)['color'], linestyle='--', label=r'(ps with noise - ps no noise) for $\alpha$ = 0')
+            if difference_ps_binned is not None:
+                ax1.loglog(modes, difference_ps_binned[i][:,(self.Npix//2)//m], color=next(ax._get_lines.prop_cycler)['color'], linestyle='--', label="ps of (rmap with noise - rmap no noise)\n" r"for $\alpha$ = 0")
+            ax1.grid()
+        fig.subplots_adjust(wspace=0.2, hspace=0.3, top=0.93, right=0.75)
+        ax.legend(bbox_to_anchor=(1.04,1), loc="upper left")
+        ax1.legend(bbox_to_anchor=(1.04,1), loc="upper left")
         plt.suptitle('rmap power spectrum')
         if plot:
             plt.show()
