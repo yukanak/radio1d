@@ -513,7 +513,8 @@ class Telescope1D:
             ax1.loglog(modes, rmap_ps_binned_with_error[i][:,(self.Npix//2)//m]/max_with_error - rmap_ps_binned_no_error[i][:,(self.Npix//2)//m]/max_no_error,
                     color=next(ax._get_lines.prop_cycler)['color'], linestyle='--', label=r'(ps with noise - ps no noise) for $\alpha$ = 0')
             if difference_ps_binned is not None:
-                ax1.loglog(modes, difference_ps_binned[i][:,(self.Npix//2)//m], color=next(ax._get_lines.prop_cycler)['color'], linestyle='--', label="ps of (rmap with noise - rmap no noise)\n" r"for $\alpha$ = 0")
+                max_diff = np.max(difference_ps_binned[i])
+                ax1.loglog(modes, difference_ps_binned[i][:,(self.Npix//2)//m]/max_diff, color=next(ax._get_lines.prop_cycler)['color'], linestyle='--', label="ps of (rmap with noise - rmap no noise)\n" r"for $\alpha$ = 0")
             ax1.grid()
         fig.subplots_adjust(wspace=0.2, hspace=0.3, top=0.93, right=0.75)
         ax = plt.subplot(gs[ncol-1])
