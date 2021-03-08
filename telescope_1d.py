@@ -8,6 +8,7 @@ from scipy.ndimage import gaussian_filter
 from matplotlib.colors import LogNorm
 from itertools import combinations
 from astropy.cosmology import Planck15 as cosmo
+from joblib import Parallel, delayed
 
 class Telescope1D:
     def __init__(self, Nfreq=256, Ndishes=32, DDish=6, Npix_fft=2**12, Npad=2**8,
@@ -203,8 +204,12 @@ class Telescope1D:
         if time_error_sigma > 0:
             # Add time errors; each antenna's error sampled from Gaussian
             time_errors = self.get_time_errors(time_error_sigma, correlated, seed)
-        uvplane_obs = np.zeros_like(uvplane, np.complex)
-        for i, f in enumerate(self.freqs):
+
+        def process_freq (i,f):
+            """
+            Wrapper for multiprocessing.
+            """
+            uvplane_obs = np.zeros_like(uvplane, np.complex)
             if time_error_sigma > 0:
                 phase_errors = time_errors*f*1e6*2*np.pi
                 # Loop through each unique baseline length
@@ -225,8 +230,17 @@ class Telescope1D:
             for ii, ind in enumerate(indices[i,:]):
                 if ind < len(uvi):
                     uvi[ind] = uvplane_obs[i,ii]
-            rmap_obs.append(self.uv2image(uvi))
-        rmap_obs = np.array(rmap_obs)
+            return self.uv2image(uvi)
+        # for i, f in enumerate(self.freqs):
+        #     rmap_obs.append(process_freq(i,f))
+        # rmap_obs = np.array(rmap_obs)
+        # print (rmap_obs.shape)
+        #rmap_obs = np.array([process_freq(i,f) for i,f in enumerate(self.freqs)])
+        ### This doesn't work
+#        rmap_obs = np.array([process_freq(i,f) for i,f in enumerate(self.freqs)])
+        rmap_obs = np.array(Parallel(n_jobs=-1)(delayed(process_freq)(i,f) for i,f in enumerate(self.freqs)))
+
+        print (rmap_obs.shape)
         return rmap_obs
 
     def plot_rmap(self, rmap, vmax=None, vmin=None):
@@ -269,23 +283,27 @@ class Telescope1D:
         plt.show()
         return ps
 
-    def beam_convolution(self, image):
+    def observe_image(self, image):
         '''
         Take the image, multiply it by the beam^2/cos(alpha).
         Do for each frequency, return the uvplane.
         '''
         p2fac = self.get_p2fac()
         Nuniquebaselines = self.unique_baseline_lengths.shape[0]
-        uvplane = np.zeros((self.Nfreq,Nuniquebaselines),np.complex)
-        # Loop over frequencies
-        for i, f in enumerate(self.freqs):
-            # Multiply by the beam^2/cos(alpha)
+        #uvplane = np.zeros((self.Nfreq,Nuniquebaselines),np.complex)
+        def process_freq(i,f):
             msky = image * p2fac[i,:]
             # FT to the uvplane and sample at indices corresponding to D/lambda
             uv = self.image2uv(msky)
-            uvplane[i,:] = self.uv2uvplane(uv,indices=self.DoL2ndx(self.DoL)[i,:])
+            return self.uv2uvplane(uv,indices=self.DoL2ndx(self.DoL)[i,:])
+        # Loop over frequencies
+        #uvplane = np.array([process_freq(i,f) for i,f in enumerate(self.freqs)])
+        uvplane = np.array(Parallel(n_jobs=-1)(delayed(process_freq)(i,f) for i,f in enumerate(self.freqs)))
         return uvplane
 
+    def beam_convolution(self, image):
+        print ("beam_convlution deprecated due to bad name. Use observe_image instead.")
+    
     def get_rmap_residuals(self, rmap_no_error, rmap_with_error, n=1,
                            vmax=None, vmin=None):
         '''
