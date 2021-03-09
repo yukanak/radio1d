@@ -1,10 +1,11 @@
 import numpy as np
 import matplotlib
-matplotlib.use('Agg')
+#matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
 from numpy.fft import rfft,irfft
 from scipy.ndimage import gaussian_filter
+from scipy.stats import norm
 from matplotlib.colors import LogNorm
 from itertools import combinations
 from astropy.cosmology import Planck15 as cosmo
@@ -267,7 +268,7 @@ class Telescope1D:
         for c in range(Nreal):
             # Create a random sky, this sky will be the same at all frequencies
             sky = self.get_uniform_sky(high=1)
-            uvplane = self.beam_convolution(sky)
+            uvplane = self.observe_image(sky)
             if time_error_sigma > 0:
                 uvplane = self.get_obs_uvplane(uvplane, time_error_sigma)
             # After uvplane is done, calculate power spectrum in the frequency direction
@@ -302,7 +303,7 @@ class Telescope1D:
         return uvplane
 
     def beam_convolution(self, image):
-        print ("beam_convlution deprecated due to bad name. Use observe_image instead.")
+        print ("beam_convolution deprecated due to bad name. Use observe_image instead.")
     
     def get_rmap_residuals(self, rmap_no_error, rmap_with_error, n=1,
                            vmax=None, vmin=None):
@@ -392,7 +393,10 @@ class Telescope1D:
             #ps_chunk = np.zeros((n+1,self.Npix))
             #for j in range(self.Npix):
             #    ps_chunk[:,j] = np.abs(rfft(np.hstack((rmap[i*n:(1+i)*n,j],np.zeros(n))))**2)
-            tofft = rmap[i*n:(1+i)*n,:]*(window_fn(n)[:,None])
+            if window_fn is not None:
+                tofft = rmap[i*n:(1+i)*n,:]*(window_fn(n)[:,None])
+            else:
+                tofft = rmap[i*n:(1+i)*n,:]
             if padding>0:
                 tofft = np.vstack((tofft,np.zeros((n*padding,self.Npix))))
             #plt.imshow(tofft,aspect='auto')
@@ -543,3 +547,14 @@ class Telescope1D:
         if plot:
             plt.show()
         return fig
+
+    def beam_no_interferometry(self, freq_MHz):
+        size = self.dish_locations[-1]
+        lam = self.freq2lam(freq_MHz)
+        fwhm = 1.22*lam/size
+        # For normal distribution, FWHM = 2sqrt(2ln2)*sigma
+        sigma = fwhm/(2*np.sqrt(2*np.log(2)))
+
+        x = np.arcsin(self.alpha)
+        beam = norm.pdf(x, 0, sigma)
+        return beam
