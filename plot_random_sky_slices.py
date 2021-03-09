@@ -58,11 +58,11 @@ def plot_sky_slices_stat(npix, redundant, sky, seed, error, correlated, path = '
         rmap_diff = rmap_with_error - rmap_no_error
         (difference_ps_binned, k_modes_diff, alpha_binned_diff) = t.get_rmap_ps(rmap_diff, Nfreqchunks=4, m_alpha=2, m_freq=2, padding=1, window_fn=np.blackman)
         fig = t.plot_rmap_ps_slice(ps_binned_no_error, ps_binned_with_error, k_modes_no_error, alpha_binned_no_error, alpha_idx_source=[], 
-                                 alpha_idx_no_source=[t.Npix//2, t.Npix//2+t.Npix//512, t.Npix//2+t.Npix//256, t.Npix//2+t.Npix//128], Nfreqchunks=4, difference_ps_binned=difference_ps_binned)
+                                 alpha_idx_no_source=[t.Npix//2, t.Npix//2+t.Npix//256, t.Npix//2+t.Npix//128, 1070*t.Npix//2048], Nfreqchunks=4, difference_ps_binned=difference_ps_binned)
         if path is not None:
             fig.savefig(path)
             plt.close(fig)
-    return fig, rmap_no_error, rmap_with_error,t
+    #return fig, rmap_no_error, rmap_with_error,t
 
 if __name__ == '__main__': 
     # ./plot_random_sky_slices.py 4096 False 'uniform' 0 300e-12 True
