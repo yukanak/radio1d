@@ -231,6 +231,7 @@ class Telescope1D:
             for ii, ind in enumerate(indices[i,:]):
                 if ind < len(uvi):
                     uvi[ind] = uvplane_obs[i,ii]
+            #print(np.where(uvi<0)[0].shape[0])
             return self.uv2image(uvi)
         # for i, f in enumerate(self.freqs):
         #     rmap_obs.append(process_freq(i,f))
@@ -238,8 +239,8 @@ class Telescope1D:
         # print (rmap_obs.shape)
         #rmap_obs = np.array([process_freq(i,f) for i,f in enumerate(self.freqs)])
         ### This doesn't work
-#        rmap_obs = np.array([process_freq(i,f) for i,f in enumerate(self.freqs)])
-        rmap_obs = np.array(Parallel(n_jobs=-1)(delayed(process_freq)(i,f) for i,f in enumerate(self.freqs)))
+        rmap_obs = np.array([process_freq(i,f) for i,f in enumerate(self.freqs)])
+        #rmap_obs = np.array(Parallel(n_jobs=-1)(delayed(process_freq)(i,f) for i,f in enumerate(self.freqs)))
 
         print (rmap_obs.shape)
         return rmap_obs
@@ -551,7 +552,7 @@ class Telescope1D:
     def beam_no_interferometry(self, freq_MHz):
         size = self.dish_locations[-1]
         lam = self.freq2lam(freq_MHz)
-        fwhm = 1.22*lam/size
+        fwhm = lam/size
         # For normal distribution, FWHM = 2sqrt(2ln2)*sigma
         sigma = fwhm/(2*np.sqrt(2*np.log(2)))
 
