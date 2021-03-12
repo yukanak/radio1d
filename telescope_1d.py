@@ -59,6 +59,71 @@ class Telescope1D:
     def lams(self):
         return self.freq2lam(self.freqs)
 
+    @property
+    def baseline_over_lam(self):
+        """ return baseline length / lam in the same shape as uvplane """
+        return np.outer(1/self.lams,self.DDish*(1+np.arange(self.Ndishes-1)))
+
+
+    def predict_point (self,alpha):
+        """ predicts signal from a points source """
+        if not self.redundant: raise (NotImplementedError)
+        return np.exp(-2j*np.pi*self.baseline_over_lam*alpha)
+
+
+    def get_FG_filtering_matrix_inverse_old (self, max_alpha=0.5):
+        #if hasattr(self,"fg_filter"):
+        #    return self.fg_filter
+        v = np.ndarray.flatten(self.baseline_over_lam)*(-max_alpha*1j*np.pi)
+        C = v[:,None]-v[None,:]
+        w  = np.where(C==0)
+        C [w] = 1.0 # to prevent sinc going funny
+        big_number = 1e5
+        C = big_number * np.sin(C)/C
+        C [w] = 1.0
+        return C
+
+    def get_FG_filtering_matrix_inverse (self,step=1):
+        p2fac = self.get_p2fac()
+        C = None
+        for i,alpha in list(enumerate(self.alpha))[::step]:
+            #print(i,alpha)
+            fsup = p2fac[:,i]
+            p = (self.predict_point(alpha)*fsup[:,None]).flatten()
+            if C is None:
+                C=np.outer(p,np.conj(p))
+            else:
+                C+=np.outer(p,np.conj(p))
+        return C
+            
+
+
+
+    ##
+
+    def filter_FG(self,uvplane, matrix = None, scale=1e-120):
+        #F = np.linalg.inv(self.get_FG_filtering_matrix_inverse())
+        #filtered = np.dot(F,uvplane.flatten())
+        if matrix is None:
+            matrix = self.get_FG_filtering_matrix_inverse()
+        eva,eve = np.linalg.eigh(np.copy(matrix),'L')
+        minval = np.abs(eva).max()*scale
+        out = np.copy(uvplane).flatten()
+        cc=0
+        for val, vec in zip(eva,eve.T):
+            if np.abs(val)>minval:
+                cvec = np.conj(vec)
+                #print(np.dot(vec,cvec))
+                x = np.dot(out,cvec)
+
+                out -= x*vec
+                x = np.dot(out,vec)
+                out -= x*cvec
+                cc+=1
+        print (f"Filtered {cc} modes.")
+        return out.reshape(uvplane.shape)
+    
+    
     def freq2lam(self, freq_MHz):
         '''
         Turns frequency (in MHz) into wavelength (in m).
@@ -291,10 +356,15 @@ class Telescope1D:
         Do for each frequency, return the uvplane.
         '''
         p2fac = self.get_p2fac()
+        if len(image.shape) == 1:
+            msky2d = image[None,:] * p2fac
+        else:
+            msky2d = image * p2fac
+            
         Nuniquebaselines = self.unique_baseline_lengths.shape[0]
         #uvplane = np.zeros((self.Nfreq,Nuniquebaselines),np.complex)
         def process_freq(i,f):
-            msky = image * p2fac[i,:]
+            msky = msky2d[i,:]
             # FT to the uvplane and sample at indices corresponding to D/lambda
             uv = self.image2uv(msky)
             return self.uv2uvplane(uv,indices=self.DoL2ndx(self.DoL)[i,:])
