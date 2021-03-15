@@ -59,35 +59,20 @@ class Telescope1D:
     def lams(self):
         return self.freq2lam(self.freqs)
 
-    @property
-    def baseline_over_lam(self):
-        """ return baseline length / lam in the same shape as uvplane """
-        return np.outer(1/self.lams,self.DDish*(1+np.arange(self.Ndishes-1)))
+    def predict_point(self, alpha):
+        '''
+        Predicts signal from a point source (predicts what the foregrounds
+        at this alpha look like).
+        '''
+        return np.exp(-2j*np.pi*self.DoL*alpha)
 
-
-    def predict_point (self,alpha):
-        """ predicts signal from a points source """
-        if not self.redundant: raise (NotImplementedError)
-        return np.exp(-2j*np.pi*self.baseline_over_lam*alpha)
-
-
-    def get_FG_filtering_matrix_inverse_old (self, max_alpha=0.5):
-        #if hasattr(self,"fg_filter"):
-        #    return self.fg_filter
-        v = np.ndarray.flatten(self.baseline_over_lam)*(-max_alpha*1j*np.pi)
-        C = v[:,None]-v[None,:]
-        w  = np.where(C==0)
-        C [w] = 1.0 # to prevent sinc going funny
-        big_number = 1e5
-        C = big_number * np.sin(C)/C
-        C [w] = 1.0
-        return C
-
-    def get_FG_filtering_matrix_inverse (self,step=1):
+    def get_FG_filtering_matrix_inverse(self, step=1):
+        '''
+        Get the matrix to use in filter_FG.
+        '''
         p2fac = self.get_p2fac()
         C = None
         for i,alpha in list(enumerate(self.alpha))[::step]:
-            #print(i,alpha)
             fsup = p2fac[:,i]
             p = (self.predict_point(alpha)*fsup[:,None]).flatten()
             if C is None:
@@ -95,34 +80,27 @@ class Telescope1D:
             else:
                 C+=np.outer(p,np.conj(p))
         return C
-            
 
-
-
-    ##
-
-    def filter_FG(self,uvplane, matrix = None, scale=1e-120):
-        #F = np.linalg.inv(self.get_FG_filtering_matrix_inverse())
-        #filtered = np.dot(F,uvplane.flatten())
+    def filter_FG(self, uvplane, matrix=None, scale=1e-11):
+        '''
+        Filter out the foregrounds (frequency independent).
+        '''
         if matrix is None:
             matrix = self.get_FG_filtering_matrix_inverse()
         eva,eve = np.linalg.eigh(np.copy(matrix),'L')
         minval = np.abs(eva).max()*scale
         out = np.copy(uvplane).flatten()
-        cc=0
+        cc = 0
         for val, vec in zip(eva,eve.T):
             if np.abs(val)>minval:
                 cvec = np.conj(vec)
-                #print(np.dot(vec,cvec))
                 x = np.dot(out,cvec)
-
                 out -= x*vec
                 x = np.dot(out,vec)
                 out -= x*cvec
-                cc+=1
-        print (f"Filtered {cc} modes.")
+                cc += 1
+        print(f"Filtered {cc} modes.")
         return out.reshape(uvplane.shape)
-    
     
     def freq2lam(self, freq_MHz):
         '''
@@ -217,7 +195,9 @@ class Telescope1D:
 
     def get_time_errors(self, time_error_sigma=10e-12, correlated=True, seed=0, r0=None):
         '''
-        Make r0 bigger to make more correlated.
+        Make argument correlated True for correlated time errors (errors of
+        neighboring dishes are more similar than errors of far away dish pairs).
+        Make argument r0 bigger to make more correlated.
         '''
         np.random.seed(seed)
         if correlated:
@@ -259,7 +239,7 @@ class Telescope1D:
                 uvplane_obs[i,j] = np.mean(uvplane_j, axis=0)
         return uvplane_obs
 
-    def get_obs_rmap(self, uvplane, time_error_sigma=10e-12, correlated=True, seed=0):
+    def get_obs_rmap(self, uvplane, time_error_sigma=10e-12, correlated=True, seed=0, filter_FG=True):
         '''
         Get the rmap observed by the telescope array.
         For no time/phase error, do time_error_sigma = 0 seconds.
@@ -267,47 +247,26 @@ class Telescope1D:
         '''
         indices = (self.DoL2ndx(self.DoL)+0.5).astype(int)
         rmap_obs = []
+        # Add time error first
         if time_error_sigma > 0:
-            # Add time errors; each antenna's error sampled from Gaussian
-            time_errors = self.get_time_errors(time_error_sigma, correlated, seed)
-
-        def process_freq (i,f):
-            """
+            uvplane_obs = self.get_obs_uvplane(uvplane, time_error_sigma, correlated, seed)
+        else:
+            uvplane_obs = uvplane
+        # Next, filter out foregrounds
+        if filter_FG:
+            matrix = self.get_FG_filtering_matrix_inverse(step=1)
+            uvplane_obs = self.filter_FG(uvplane_obs, matrix, scale=1e-11)
+        # Then, convert to rmap
+        def process_freq(i, f):
+            '''
             Wrapper for multiprocessing.
-            """
-            uvplane_obs = np.zeros_like(uvplane, np.complex)
-            if time_error_sigma > 0:
-                phase_errors = time_errors*f*1e6*2*np.pi
-                # Loop through each unique baseline length
-                # Get and average all the observed visibilities for each
-                for j, baseline_len in enumerate(self.unique_baseline_lengths):
-                    redundant_baseline_idxs = np.where(self.baseline_lengths==baseline_len)[0]
-                    uvplane_j = []
-                    for k in redundant_baseline_idxs:
-                        dish1_loc, dish2_loc = list(combinations(self.dish_locations,2))[k]
-                        dish1_idx = np.where(self.dish_locations==dish1_loc)[0][0]
-                        dish2_idx = np.where(self.dish_locations==dish2_loc)[0][0]
-                        uvplane_j.append((np.exp(1j*(phase_errors[dish2_idx]-phase_errors[dish1_idx])))*uvplane[i,j])
-                    uvplane_j = np.array(uvplane_j, np.complex)
-                    uvplane_obs[i,j] = np.mean(uvplane_j, axis=0)
-            else:
-                uvplane_obs = uvplane
+            '''
             uvi = self.empty_uv()
             for ii, ind in enumerate(indices[i,:]):
                 if ind < len(uvi):
                     uvi[ind] = uvplane_obs[i,ii]
-            #print(np.where(uvi<0)[0].shape[0])
             return self.uv2image(uvi)
-        # for i, f in enumerate(self.freqs):
-        #     rmap_obs.append(process_freq(i,f))
-        # rmap_obs = np.array(rmap_obs)
-        # print (rmap_obs.shape)
-        #rmap_obs = np.array([process_freq(i,f) for i,f in enumerate(self.freqs)])
-        ### This doesn't work
         rmap_obs = np.array([process_freq(i,f) for i,f in enumerate(self.freqs)])
-        #rmap_obs = np.array(Parallel(n_jobs=-1)(delayed(process_freq)(i,f) for i,f in enumerate(self.freqs)))
-
-        print (rmap_obs.shape)
         return rmap_obs
 
     def plot_rmap(self, rmap, vmax=None, vmin=None):
@@ -323,12 +282,16 @@ class Telescope1D:
         plt.show()
 
     def get_p2fac(self):
+        '''
+        Returns (Nfreq x Npix) array of the beam^2/cos(alpha).
+        '''
         return np.array([np.abs(self.primary_beam_1(f)**2)/np.cos(self.alpha) for f in self.freqs])
 
-    def plot_wedge(self, Nreal=100, time_error_sigma=0):
+    def plot_wedge(self, Nreal=100, time_error_sigma=0, correlated=True, seed=0):
         '''
         Simulate various skies, and plot the wedge.
         '''
+        np.random.seed(seed)
         Nuniquebaselines = self.unique_baseline_lengths.shape[0]
         ps = np.zeros((self.Nfreq+1,Nuniquebaselines)) # (2*Nfreq/2)+1 = Nfreq+1
         for c in range(Nreal):
@@ -336,7 +299,7 @@ class Telescope1D:
             sky = self.get_uniform_sky(high=1)
             uvplane = self.observe_image(sky)
             if time_error_sigma > 0:
-                uvplane = self.get_obs_uvplane(uvplane, time_error_sigma)
+                uvplane = self.get_obs_uvplane(uvplane, time_error_sigma, correlated, seed)
             # After uvplane is done, calculate power spectrum in the frequency direction
             # This gives delay spectrum
             for j in range(Nuniquebaselines):
@@ -379,6 +342,7 @@ class Telescope1D:
     def get_rmap_residuals(self, rmap_no_error, rmap_with_error, n=1,
                            vmax=None, vmin=None):
         '''
+        Plot the residuals for rmap.
         n is how many frequency bins of freqs should we bin together.
         '''
         freq_vec = np.zeros(len(self.freqs)//n)
@@ -440,14 +404,14 @@ class Telescope1D:
         p = p * 100
         return p
 
-    def get_uniform_sky(self, high=1, seed=0):
+    def get_uniform_sky(self, high=2, seed=0):
         '''
         Get a uniform random sky from 0 to high.
         '''
         np.random.seed(seed)
         return np.random.uniform(0,high,self.Npix)
 
-    def get_rmap_ps(self, rmap, Nfreqchunks=4, m_alpha=2, m_freq=2, padding=1, window_fn = np.blackman, plot = False, vmin=None, vmax=None, log=True):
+    def get_rmap_ps(self, rmap, Nfreqchunks=4, m_alpha=2, m_freq=2, padding=1, window_fn=np.blackman, plot=False, vmin=None, vmax=None, log=True):
         '''
         Get and plot the power spectrum for rmap.
         For just one full plot of the power spectrum, set Nfreqchunks as 1,
@@ -468,12 +432,9 @@ class Telescope1D:
                 tofft = rmap[i*n:(1+i)*n,:]*(window_fn(n)[:,None])
             else:
                 tofft = rmap[i*n:(1+i)*n,:]
-            if padding>0:
+            if padding > 0:
                 tofft = np.vstack((tofft,np.zeros((n*padding,self.Npix))))
-            #plt.imshow(tofft,aspect='auto')
-            #stop()
             ps_chunk = np.abs(rfft(tofft,axis=0)**2)
-            #print (tofft.shape,ps_chunk.shape)
             ps.append(ps_chunk)
 
         # After getting the power spectra, bin in both x and y directions
@@ -498,9 +459,8 @@ class Telescope1D:
             freq_last = self.freqs[(1+i)*n-1]
             # Get size of the chunk (dist_max) then the fundamental mode is 2*pi/dist_max
             dist_max = self.freq2distance(freq_first, freq_last)
-            #k0 = 2*np.pi/dist_max
             # Scale k0 by m_freq/(1+padding), where m_freq is the downsampling and 1+padding is the upsampling factor
-            k0 = 2*np.pi/dist_max/(1+padding) ## for unbinned
+            k0 = 2*np.pi/dist_max/(1+padding)
             #print (f"Fundamental mode for chunk {i} is {k0}")
             k_modes_unbinned.append(np.arange(n_row_bins*m_freq)*k0) # In h/Mpc
         if plot:    
@@ -529,7 +489,7 @@ class Telescope1D:
                     plt.colorbar()
             fig.subplots_adjust(wspace=0, hspace=0.1, top=0.95)
             plt.show()
-        k_modes = [ ks[:n_row_bins*m_freq].reshape((n_row_bins,-1)).mean(axis=1) for ks in k_modes_unbinned]
+        k_modes = [ks[:n_row_bins*m_freq].reshape((n_row_bins,-1)).mean(axis=1) for ks in k_modes_unbinned]
         alpha_binned = self.alpha[:m_alpha*n_col_bins].reshape((n_col_bins,-1)).mean(axis=1)
         return (ps_binned, k_modes, alpha_binned)
 
@@ -544,7 +504,6 @@ class Telescope1D:
         z2 = freq_21/freq2 - 1
         distance1 = cosmo.comoving_distance(z=z1).value * cosmo.h
         distance2 = cosmo.comoving_distance(z=z2).value * cosmo.h
-        #print (z1,z2,distance1,distance2)
         return distance1-distance2
 
     def plot_rmap_ps_slice(self, rmap_ps_binned_no_error, rmap_ps_binned_with_error,
@@ -620,12 +579,15 @@ class Telescope1D:
         return fig
 
     def beam_no_interferometry(self, freq_MHz):
+        '''
+        Returns what the beam would be, ignoring the interferometry
+        (so treating array as one huge dish, no interferometry).
+        '''
         size = self.dish_locations[-1]
         lam = self.freq2lam(freq_MHz)
         fwhm = lam/size
         # For normal distribution, FWHM = 2sqrt(2ln2)*sigma
         sigma = fwhm/(2*np.sqrt(2*np.log(2)))
-
         x = np.arcsin(self.alpha)
         beam = norm.pdf(x, 0, sigma)
         return beam
