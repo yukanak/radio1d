@@ -11,25 +11,24 @@ from astropy.cosmology import Planck15 as cosmo
 import telescope_1d
 import os, sys
 
-def plot_sky_slices_stat(npix, redundant, sky, seed, error, correlated, path = 'slac',   Ndishes_array = [32, 64, 128], second_plot = 'terr'):
+def plot_sky_slices_stat(npix, redundant, sky, seed, error, correlated, path = 'slac', Ndishes_array = [32, 64, 128], second_plot = 'terr'):
     for ndishes in Ndishes_array:
         if path == 'slac':
             path = os.path.join(os.environ['HOME'], 'public_html/figs/npix_{npix}_ndish_{ndishes}_redundant_{redundant}_sky_{sky}_seed_{seed}_error_{error}_correlated_{correlated}.png'.format(npix=npix, ndishes=ndishes, redundant=redundant, sky=sky, seed=seed, error=error, correlated=correlated))
-            print ("Saving to ",path)
             # Check if the image already exists
             if os.path.isfile(path):
                 continue
+        # Initialize telescope
         t = telescope_1d.Telescope1D(Nfreq=256, Ndishes=ndishes, DDish=6, Npix_fft=npix, Npad=2**8,
                                  minfreq=400, maxfreq=800, redundant=redundant, seed=seed)
-        print ("Creating map...")
-        if (npix<8192):
-            assert (8192%npix==0)
+        if npix < 8192:
+            assert(8192%npix == 0)
             fact = 8192//npix
             timag = telescope_1d.Telescope1D(Nfreq=256, Ndishes=ndishes, DDish=6, Npix_fft=8192, Npad=2**8,
                                     minfreq=400, maxfreq=800, redundant=redundant, seed=seed)
         else:
             timag = t
-        
+        # Make skies
         if sky == 'uniform':
             image = timag.get_uniform_sky(high=2, seed=seed)
         elif sky == 'poisson':
@@ -37,22 +36,21 @@ def plot_sky_slices_stat(npix, redundant, sky, seed, error, correlated, path = '
         elif sky == 'gaussian':
             image = timag.get_gaussian_sky(mean=1, sigma_o=0.5, sigma_f=60, seed=seed)
         else:
-            print ("bad sky type")
+            print("Bad sky type!")
             stop()
-
-        if npix<8192:
+        if npix < 8192:
             image = np.append(image[:-1].reshape(npix,fact).mean(axis=1),0)
-        print ("Observing map...")
+        # Observe image
         uvplane = t.observe_image(image)
-        print ("Generating real space maps...")
-        rmap_no_error = t.get_obs_rmap(uvplane, time_error_sigma=0)
+        # Generate real space maps
+        rmap_no_error = t.get_obs_rmap(uvplane, time_error_sigma=0, filter_FG=True)
         if second_plot == 'terr':
-            rmap_with_error = t.get_obs_rmap(uvplane, time_error_sigma=error, correlated=correlated, seed=seed)
+            rmap_with_error = t.get_obs_rmap(uvplane, time_error_sigma=error, correlated=correlated, seed=seed, filter_FG=True)
         elif second_plot == 'fweight':
             freqs = t.freqs
             weight = freqs/freqs.mean()
             rmap_with_error = np.copy(rmap_no_error)/weight[:,None]
-        print ("PS calc and plotting...")
+        # Power spectrum calculation and plotting
         (ps_binned_no_error, k_modes_no_error, alpha_binned_no_error) = t.get_rmap_ps(rmap_no_error, Nfreqchunks=4, m_alpha=2, m_freq=2, padding=1, window_fn=np.blackman)
         (ps_binned_with_error, k_modes_with_error, alpha_binned_with_error) = t.get_rmap_ps(rmap_with_error, Nfreqchunks=4, m_alpha=2, m_freq=2, padding=1, window_fn=np.blackman)
         rmap_diff = rmap_with_error - rmap_no_error
@@ -62,7 +60,7 @@ def plot_sky_slices_stat(npix, redundant, sky, seed, error, correlated, path = '
         if path is not None:
             fig.savefig(path)
             plt.close(fig)
-    #return fig, rmap_no_error, rmap_with_error,t
+    #return fig, rmap_no_error, rmap_with_error, t
 
 if __name__ == '__main__': 
     # ./plot_random_sky_slices.py 4096 False 'uniform' 0 300e-12 True
