@@ -16,7 +16,7 @@ def plot_sky_slices_stat(npix, redundant, sky, seed, error, correlated, ndishes,
         path = os.path.join(os.environ['HOME'], 'public_html/figs/npix_{npix}_ndish_{ndishes}_redundant_{redundant}_sky_{sky}_seed_{seed}_error_{error}_correlated_{correlated}.png'.format(npix=npix, ndishes=ndishes, redundant=redundant, sky=sky, seed=seed, error=error, correlated=correlated))
         # Check if the image already exists
         if os.path.isfile(path):
-            continue
+            return
     # Initialize telescope
     t = telescope_1d.Telescope1D(Nfreq=256, Ndishes=ndishes, DDish=6, Npix_fft=npix, Npad=2**8,
                              minfreq=400, maxfreq=800, redundant=redundant, seed=seed)
