@@ -80,7 +80,7 @@ if __name__ == '__main__':
                     for seed in seed_array:
                         for error in time_error_array:
                             for correlated in correlated_array:
-				for ndishes in ndishes_array:
+                                for ndishes in ndishes_array:
                                     plot_sky_slices_stat(npix, redundant, sky, seed, error, correlated, ndishes)
     else:
         npix = int(sys.argv[1])
