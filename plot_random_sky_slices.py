@@ -13,7 +13,7 @@ import os, sys
 
 def plot_sky_slices_stat(npix, redundant, sky, seed, error, correlated, ndishes, path='slac', second_plot='terr'):
     if path == 'slac':
-        path = os.path.join(os.environ['HOME'], 'public_html/figs/npix_{npix}_ndish_{ndishes}_redundant_{redundant}_sky_{sky}_seed_{seed}_error_{error}_correlated_{correlated}.png'.format(npix=npix, ndishes=ndishes, redundant=redundant, sky=sky, seed=seed, error=error, correlated=correlated))
+        path = os.path.join(os.environ['HOME'], 'public_html/figs/npix_{npix}_ndish_{ndishes}_redundant_{redundant}_sky_{sky}_seed_{seed}_error_{error}_correlated_{correlated}_filtered.png'.format(npix=npix, ndishes=ndishes, redundant=redundant, sky=sky, seed=seed, error=error, correlated=correlated))
         # Check if the image already exists
         if os.path.isfile(path):
             return
@@ -41,21 +41,20 @@ def plot_sky_slices_stat(npix, redundant, sky, seed, error, correlated, ndishes,
         image = np.append(image[:-1].reshape(npix,fact).mean(axis=1),0)
     # Observe image
     uvplane = t.observe_image(image)
-    # Generate real space maps
-    rmap_no_error = t.get_obs_rmap(uvplane, time_error_sigma=0, filter_FG=True)
+    # Get observed uvplane
+    uvplane_no_error = t.get_obs_uvplane(uvplane, time_error_sigma=0, filter_FG=True)
     if second_plot == 'terr':
-        rmap_with_error = t.get_obs_rmap(uvplane, time_error_sigma=error, correlated=correlated, seed=seed, filter_FG=True)
+        uvplane_with_error = t.get_obs_uvplane(uvplane, time_error_sigma=error, correlated=correlated, seed=seed, filter_FG=True)
     elif second_plot == 'fweight':
         freqs = t.freqs
         weight = freqs/freqs.mean()
-        rmap_with_error = np.copy(rmap_no_error)/weight[:,None]
+        uvplane_with_error = np.copy(uvplane_no_error)/weight[:,None]
     # Power spectrum calculation and plotting
-    (ps_binned_no_error, k_modes_no_error, alpha_binned_no_error) = t.get_rmap_ps(rmap_no_error, Nfreqchunks=4, m_alpha=2, m_freq=2, padding=1, window_fn=np.blackman)
-    (ps_binned_with_error, k_modes_with_error, alpha_binned_with_error) = t.get_rmap_ps(rmap_with_error, Nfreqchunks=4, m_alpha=2, m_freq=2, padding=1, window_fn=np.blackman)
-    rmap_diff = rmap_with_error - rmap_no_error
-    (difference_ps_binned, k_modes_diff, alpha_binned_diff) = t.get_rmap_ps(rmap_diff, Nfreqchunks=4, m_alpha=2, m_freq=2, padding=1, window_fn=np.blackman)
-    fig = t.plot_rmap_ps_slice(ps_binned_no_error, ps_binned_with_error, k_modes_no_error, alpha_binned_no_error, alpha_idx_source=[], 
-                             alpha_idx_no_source=[t.Npix//2, t.Npix//2+t.Npix//256, t.Npix//2+t.Npix//128, 1070*t.Npix//2048], Nfreqchunks=4, difference_ps_binned=difference_ps_binned)
+    (ps_binned_no_error, k_modes_no_error, baselines_binned_no_error) = t.get_uvplane_ps(uvplane_no_error, Nfreqchunks=4, m_baselines=2, m_freq=2, padding=1, window_fn=np.blackman)
+    (ps_binned_with_error, k_modes_with_error, baselines_binned_with_error) = t.get_uvplane_ps(uvplane_with_error, Nfreqchunks=4, m_baselines=2, m_freq=2, padding=1, window_fn=np.blackman)
+    uvplane_diff = uvplane_with_error - uvplane_no_error
+    (difference_ps_binned, k_modes_diff, baselines_binned_diff) = t.get_uvplane_ps(uvplane_diff, Nfreqchunks=4, m_baselines=2, m_freq=2, padding=1, window_fn=np.blackman)
+    fig = t.plot_uvplane_ps_slice(ps_binned_no_error, ps_binned_with_error, k_modes_no_error, baselines_binned_no_error, Nfreqchunks=4, difference_ps_binned=difference_ps_binned)
     if path is not None:
         fig.savefig(path)
         plt.close(fig)

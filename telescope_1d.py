@@ -217,26 +217,34 @@ class Telescope1D:
             time_errors = np.random.normal(0,time_error_sigma,self.Ndishes)
         return time_errors
 
-    def get_obs_uvplane(self, uvplane, time_error_sigma=10e-12, correlated=True, seed=0):
+    def get_obs_uvplane(self, uvplane, time_error_sigma=10e-12, correlated=True, seed=0, filter_FG=True):
         '''
         Get the uvplane with time error.
         '''
-        time_errors = self.get_time_errors(time_error_sigma=time_error_sigma, correlated=correlated, seed=seed)
-        uvplane_obs = np.zeros_like(uvplane, np.complex)
-        for i, f in enumerate(self.freqs):
-            phase_errors = time_errors*f*1e6*2*np.pi
-            # Loop through each unique baseline length
-            # Get and average all the observed visibilities for each
-            for j, baseline_len in enumerate(self.unique_baseline_lengths):
-                redundant_baseline_idxs = np.where(self.baseline_lengths==baseline_len)[0]
-                uvplane_j = []
-                for k in redundant_baseline_idxs:
-                    dish1_loc, dish2_loc = list(combinations(self.dish_locations,2))[k]
-                    dish1_idx = np.where(self.dish_locations==dish1_loc)[0][0]
-                    dish2_idx = np.where(self.dish_locations==dish2_loc)[0][0]
-                    uvplane_j.append((np.exp(1j*(phase_errors[dish2_idx]-phase_errors[dish1_idx])))*uvplane[i,j])
-                uvplane_j = np.array(uvplane_j, np.complex)
-                uvplane_obs[i,j] = np.mean(uvplane_j, axis=0)
+        # Add time errors
+        if time_error_sigma > 0:
+            time_errors = self.get_time_errors(time_error_sigma=time_error_sigma, correlated=correlated, seed=seed)
+            uvplane_obs = np.zeros_like(uvplane, np.complex)
+            for i, f in enumerate(self.freqs):
+                phase_errors = time_errors*f*1e6*2*np.pi
+                # Loop through each unique baseline length
+                # Get and average all the observed visibilities for each
+                for j, baseline_len in enumerate(self.unique_baseline_lengths):
+                    redundant_baseline_idxs = np.where(self.baseline_lengths==baseline_len)[0]
+                    uvplane_j = []
+                    for k in redundant_baseline_idxs:
+                        dish1_loc, dish2_loc = list(combinations(self.dish_locations,2))[k]
+                        dish1_idx = np.where(self.dish_locations==dish1_loc)[0][0]
+                        dish2_idx = np.where(self.dish_locations==dish2_loc)[0][0]
+                        uvplane_j.append((np.exp(1j*(phase_errors[dish2_idx]-phase_errors[dish1_idx])))*uvplane[i,j])
+                    uvplane_j = np.array(uvplane_j, np.complex)
+                    uvplane_obs[i,j] = np.mean(uvplane_j, axis=0)
+        else:
+            uvplane_obs = uvplane
+        # Filter foregrounds
+        if filter_FG:
+            matrix = self.get_FG_filtering_matrix_inverse(step=1)
+            uvplane_obs = self.filter_FG(uvplane_obs, matrix, scale=1e-11)
         return uvplane_obs
 
     def get_obs_rmap(self, uvplane, time_error_sigma=10e-12, correlated=True, seed=0, filter_FG=True):
@@ -247,15 +255,8 @@ class Telescope1D:
         '''
         indices = (self.DoL2ndx(self.DoL)+0.5).astype(int)
         rmap_obs = []
-        # Add time error first
-        if time_error_sigma > 0:
-            uvplane_obs = self.get_obs_uvplane(uvplane, time_error_sigma, correlated, seed)
-        else:
-            uvplane_obs = uvplane
-        # Next, filter out foregrounds
-        if filter_FG:
-            matrix = self.get_FG_filtering_matrix_inverse(step=1)
-            uvplane_obs = self.filter_FG(uvplane_obs, matrix, scale=1e-11)
+        # Add time error first, then filter foregrounds
+        uvplane_obs = self.get_obs_uvplane(uvplane, time_error_sigma, correlated, seed, filter_FG)
         # Then, convert to rmap
         def process_freq(i, f):
             '''
@@ -463,6 +464,7 @@ class Telescope1D:
             k0 = 2*np.pi/dist_max/(1+padding)
             #print (f"Fundamental mode for chunk {i} is {k0}")
             k_modes_unbinned.append(np.arange(n_row_bins*m_freq)*k0) # In h/Mpc
+
         if plot:    
             fig = plt.figure(figsize=(50,25))
             if log:
@@ -591,3 +593,144 @@ class Telescope1D:
         x = np.arcsin(self.alpha)
         beam = norm.pdf(x, 0, sigma)
         return beam
+
+    def get_uvplane_ps(self, uvplane, Nfreqchunks=4, m_baselines=2, m_freq=2, padding=1, window_fn=np.blackman, plot=False, vmin=None, vmax=None, log=True):
+        '''
+        Get and plot the power spectrum for uvplane.
+        For just one full plot of the power spectrum, set Nfreqchunks as 1,
+        otherwise we divide the rmap into frequency chunks and
+        compute the power spectrum independently for each chunk.
+        After getting the power spectra, we bin in both x and y directions;
+        m is how many of the existing bins we want to put in each bin.
+        '''
+        # Divide into frequency chunks
+        # In each chunk, FT along the line of sight and square
+        n = self.Nfreq//Nfreqchunks
+        ps = []
+        for i in range(Nfreqchunks):
+            #ps_chunk = np.zeros((n+1,self.Npix))
+            #for j in range(self.Npix):
+            #    ps_chunk[:,j] = np.abs(rfft(np.hstack((rmap[i*n:(1+i)*n,j],np.zeros(n))))**2)
+            if window_fn is not None:
+                tofft = uvplane[i*n:(1+i)*n,:]*(window_fn(n)[:,None])
+            else:
+                tofft = uvplane[i*n:(1+i)*n,:]
+            if padding > 0:
+                tofft = np.vstack((tofft,np.zeros((n*padding,self.unique_baseline_lengths.shape[0]))))
+            ps_chunk = np.abs(rfft(tofft,axis=0)**2)
+            ps.append(ps_chunk)
+
+        # After getting the power spectra, bin in both x and y directions
+        n_rows = n*(1+padding)//2+1
+        n_cols = self.unique_baseline_lengths.shape[0]
+        n_row_bins = n_rows//m_freq
+        n_col_bins = n_cols//m_baselines
+        # Discard some values if necessary
+        for i, ps_chunk in enumerate(ps):
+            ps[i] = ps_chunk[:m_baselines*n_row_bins,:m_baselines*n_col_bins]
+        ps_binned = []
+        # Bin
+        for ps_chunk in ps:
+            ps_chunk_binned = ps_chunk.reshape(n_row_bins, n_rows//n_row_bins, n_col_bins, n_cols//n_col_bins).sum(axis=3).sum(axis=1)
+            ps_binned.append(ps_chunk_binned)
+        
+        # Convert from frequency to distance (Mpc/h)
+        k_modes_unbinned = []
+        last_modes = []
+        for i in range(Nfreqchunks):
+            freq_first = self.freqs[i*n]
+            freq_last = self.freqs[(1+i)*n-1]
+            # Get size of the chunk (dist_max) then the fundamental mode is 2*pi/dist_max
+            dist_max = self.freq2distance(freq_first, freq_last)
+            # Scale k0 by m_freq/(1+padding), where m_freq is the downsampling and 1+padding is the upsampling factor
+            k0 = 2*np.pi/dist_max/(1+padding)
+            #print (f"Fundamental mode for chunk {i} is {k0}")
+            k_modes_unbinned.append(np.arange(n_row_bins*m_freq)*k0) # In h/Mpc
+
+        if plot:    
+            fig = plt.figure(figsize=(50,25))
+            if log:
+                for i in range(Nfreqchunks):
+                    plt.subplot(2,Nfreqchunks//2,i+1)
+                    plt.imshow(ps_binned[i],origin='lower',aspect='auto',
+                               interpolation='nearest', norm=LogNorm(), vmin=vmin, vmax=vmax,
+                               extent=(self.alpha[0],self.alpha[-1],k_modes_unbinned[i][0],
+                               k_modes_unbinned[i][-1]))
+                    plt.xlabel(r'sin($\theta$)')
+                    plt.ylabel('[h/Mpc]')
+                    plt.title('Frequency Chunk {}'.format(i+1))
+                    plt.colorbar()
+            else:
+                for i in range(Nfreqchunks):
+                    plt.subplot(2,Nfreqchunks//2,i+1)
+                    plt.imshow(ps_binned[i],origin='lower',aspect='auto',
+                               interpolation='nearest', vmin=vmin, vmax=vmax,
+                               extent=(self.alpha[0],self.alpha[-1],k_modes_unbinned[i][0],
+                               k_modes_unbinned[i][-1]))
+                    plt.xlabel(r'sin($\theta$)')
+                    plt.ylabel('[h/Mpc]')
+                    plt.title('Frequency Chunk {}'.format(i+1))
+                    plt.colorbar()
+            fig.subplots_adjust(wspace=0, hspace=0.1, top=0.95)
+            plt.show()
+        k_modes = [ks[:n_row_bins*m_freq].reshape((n_row_bins,-1)).mean(axis=1) for ks in k_modes_unbinned]
+        baselines_binned = self.unique_baseline_lengths[:m_baselines*n_col_bins].reshape((n_col_bins,-1)).mean(axis=1)
+        return (ps_binned, k_modes, baselines_binned)
+
+    def plot_uvplane_ps_slice(self, uvplane_ps_binned_no_error, uvplane_ps_binned_with_error,
+                           k_modes, baselines_binned,
+                           baselines=[],
+                           Nfreqchunks=4, plot=False, difference_ps_binned=None):
+        '''
+        Plot the power spectrum (of the specified chunk) returned by
+        get_uvplane_ps for a specific baseline.
+        '''
+        #fig = plt.figure(figsize=(50,12))
+        fig = plt.figure(figsize=(15,15))
+        gs = gridspec.GridSpec(4, Nfreqchunks//2, height_ratios=[4, 1, 4, 1])
+        for i in range(Nfreqchunks):
+            max_no_error = np.max(uvplane_ps_binned_no_error[i])
+            max_with_error = np.max(uvplane_ps_binned_with_error[i])
+            ncol = Nfreqchunks//2
+            ax = plt.subplot(gs[i%ncol+(i//ncol)*(ncol*2)])
+            modes = k_modes[i]
+            m = self.unique_baseline_lengths.shape[0]//baselines_binned.shape[0]
+            if not baselines:
+                baselines.append(0)
+                baselines.append(self.unique_baseline_lengths.shape[0]//2)
+                baselines.append(self.unique_baseline_lengths.shape[0]-1)
+            for b in baselines:
+                baseline_idx_binned = b//m # Divide by the m argument of get_uvplane_ps
+                bl = self.unique_baseline_lengths[b]
+                color = next(ax._get_lines.prop_cycler)['color']
+                ax.loglog(modes, uvplane_ps_binned_no_error[i][:,baseline_idx_binned]/max_no_error,
+                           linestyle=':', color=color, label=f'baseline length = {bl} m (no noise)')
+                ax.loglog(modes, uvplane_ps_binned_with_error[i][:,baseline_idx_binned]/max_with_error,
+                           linestyle='-', color=color, label=f'baseline length = {bl} m (with noise)')
+            # Add line at 1e-6
+            line = np.array([1e-6 for i in range(len(modes))])
+            color = next(ax._get_lines.prop_cycler)['color']
+            ax.loglog(modes, line, linestyle='-.', color=color)
+            ax.set_xlabel('modes [h/Mpc]')
+            ax.set_ylabel('power spectrum')
+            ax.set_ylim(1e-12, 1)
+            ax.set_title('frequency chunk {}'.format(i+1))
+            # Plot the differences (errors - no errors)
+            ax1 = plt.subplot(gs[i%ncol+(i//ncol)*(ncol*2)+ncol])
+            bl = self.unique_baseline_lengths[self.unique_baseline_lengths.shape[0]//2]
+            ax1.loglog(modes,
+                    uvplane_ps_binned_with_error[i][:,(self.unique_baseline_lengths.shape[0]//2)//m]/max_with_error - uvplane_ps_binned_no_error[i][:,(self.unique_baseline_lengths.shape[0]//2)//m]/max_no_error,
+                    color=next(ax._get_lines.prop_cycler)['color'], linestyle='--', label=f'(ps with noise - ps no noise) for baseline = {bl} m')
+            if difference_ps_binned is not None:
+                max_diff = np.max(difference_ps_binned[i])
+                ax1.loglog(modes, difference_ps_binned[i][:,(self.unique_baseline_lengths.shape[0]//2)//m]/max_diff, color=next(ax._get_lines.prop_cycler)['color'], linestyle='--', label="ps of (uvplane with noise - uvplane no noise)\n" f"for baseline = {bl} m")
+            ax1.grid()
+        fig.subplots_adjust(wspace=0.2, hspace=0.3, top=0.93, right=0.75)
+        ax = plt.subplot(gs[ncol-1])
+        ax1 = plt.subplot(gs[2*ncol-1])
+        ax.legend(bbox_to_anchor=(1.04,1), loc="upper left")
+        ax1.legend(bbox_to_anchor=(1.04,1), loc="upper left")
+        plt.suptitle('uvplane power spectrum')
+        if plot:
+            plt.show()
+        return fig
