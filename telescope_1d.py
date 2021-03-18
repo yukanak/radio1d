@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib
-#matplotlib.use('Agg')
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
 from numpy.fft import rfft,irfft
@@ -245,7 +245,7 @@ class Telescope1D:
         # Filter foregrounds
         if filter_FG:
             matrix = self.get_FG_filtering_matrix_inverse(step=1)
-            uvplane_obs = self.filter_FG(uvplane_obs, matrix, scale=1e-11)
+            uvplane_obs = self.filter_FG(uvplane_obs)
         return uvplane_obs
 
     def get_obs_rmap(self, uvplane, time_error_sigma=10e-12, correlated=True, seed=0, filter_FG=True):
@@ -702,6 +702,8 @@ class Telescope1D:
                 baselines.append(self.unique_baseline_lengths.shape[0]-1)
             for b in baselines:
                 baseline_idx_binned = b//m # Divide by the m argument of get_uvplane_ps
+                if baseline_idx_binned == len(uvplane_ps_binned_no_error[i][0,:]):
+                    baseline_idx_binned -= 1
                 bl = self.unique_baseline_lengths[b]
                 color = next(ax._get_lines.prop_cycler)['color']
                 ax.loglog(modes, uvplane_ps_binned_no_error[i][:,baseline_idx_binned]/max_no_error,

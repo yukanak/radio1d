@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import numpy as np
 import matplotlib
-#matplotlib.use('Agg')
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from numpy.fft import rfft,irfft
 from scipy.ndimage import gaussian_filter
@@ -50,10 +50,10 @@ def plot_sky_slices_stat(npix, redundant, sky, seed, error, correlated, ndishes,
         weight = freqs/freqs.mean()
         uvplane_with_error = np.copy(uvplane_no_error)/weight[:,None]
     # Power spectrum calculation and plotting
-    (ps_binned_no_error, k_modes_no_error, baselines_binned_no_error) = t.get_uvplane_ps(uvplane_no_error, Nfreqchunks=4, m_baselines=2, m_freq=2, padding=1, window_fn=np.blackman)
-    (ps_binned_with_error, k_modes_with_error, baselines_binned_with_error) = t.get_uvplane_ps(uvplane_with_error, Nfreqchunks=4, m_baselines=2, m_freq=2, padding=1, window_fn=np.blackman)
+    (ps_binned_no_error, k_modes_no_error, baselines_binned_no_error) = t.get_uvplane_ps(uvplane_no_error, Nfreqchunks=4, m_baselines=1, m_freq=2, padding=1, window_fn=np.blackman)
+    (ps_binned_with_error, k_modes_with_error, baselines_binned_with_error) = t.get_uvplane_ps(uvplane_with_error, Nfreqchunks=4, m_baselines=1, m_freq=2, padding=1, window_fn=np.blackman)
     uvplane_diff = uvplane_with_error - uvplane_no_error
-    (difference_ps_binned, k_modes_diff, baselines_binned_diff) = t.get_uvplane_ps(uvplane_diff, Nfreqchunks=4, m_baselines=2, m_freq=2, padding=1, window_fn=np.blackman)
+    (difference_ps_binned, k_modes_diff, baselines_binned_diff) = t.get_uvplane_ps(uvplane_diff, Nfreqchunks=4, m_baselines=1, m_freq=2, padding=1, window_fn=np.blackman)
     fig = t.plot_uvplane_ps_slice(ps_binned_no_error, ps_binned_with_error, k_modes_no_error, baselines_binned_no_error, Nfreqchunks=4, difference_ps_binned=difference_ps_binned)
     if path is not None:
         fig.savefig(path)
