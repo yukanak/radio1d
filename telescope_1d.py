@@ -28,6 +28,7 @@ class Telescope1D:
         self.Ndishes = Ndishes
         self.DDish = DDish
         self.redundant = redundant
+        self.matrix = None
 
         # If redundant = True, the distance between consecutive dishes is DDish
         dish_locations = np.arange(0,Ndishes,dtype=float)
@@ -81,17 +82,17 @@ class Telescope1D:
                 C+=np.outer(p,np.conj(p))
         return C
 
-    def filter_FG(self, uvplane, matrix=None, scale=1e-11):
+    def filter_FG(self, uvplane, scale=1e-11):
         '''
         Filter out the foregrounds (frequency independent).
         '''
-        if matrix is None:
-            matrix = self.get_FG_filtering_matrix_inverse()
-        eva,eve = np.linalg.eigh(np.copy(matrix),'L')
-        minval = np.abs(eva).max()*scale
+        if self.matrix is None:
+            self.matrix = self.get_FG_filtering_matrix_inverse()
+            self.eva, self.eve = np.linalg.eigh(np.copy(self.matrix),'L')
+        minval = np.abs(self.eva).max()*scale
         out = np.copy(uvplane).flatten()
         cc = 0
-        for val, vec in zip(eva,eve.T):
+        for val, vec in zip(self.eva, self.eve.T):
             if np.abs(val)>minval:
                 cvec = np.conj(vec)
                 x = np.dot(out,cvec)
