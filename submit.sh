@@ -7,7 +7,7 @@ for npix in 2048 4096 8192; do
                     for correlated in 'True' 'False'; do
                         for ndishes in 32 64 128; do
                             #echo "bsub -C 0 -W 1:00 -R select[rhel60] -o logfile_${npix}_${redundant}_${sky}_${error}.txt plot_random_sky_slices.py $npix $redundant $sky $error"
-                            bsub -q long -C 0 -W 1:00 -R select[rhel60] -o logfile_${npix}_${redundant}_${sky}_${seed}_${error}_${correlated}_${ndishes}.txt ./plot_random_sky_slices.py $npix $redundant $sky $seed $error $correlated $ndishes
+                            bsub -q long -C 0 -W 5:00 -R select[rhel60] -o logfile_${npix}_${redundant}_${sky}_${seed}_${error}_${correlated}_${ndishes}.txt ./plot_random_sky_slices.py $npix $redundant $sky $seed $error $correlated $ndishes
                         done
                     done
                 done
