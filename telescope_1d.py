@@ -245,7 +245,7 @@ class Telescope1D:
         # Filter foregrounds
         if filter_FG:
             matrix = self.get_FG_filtering_matrix_inverse(step=1)
-            uvplane_obs = self.filter_FG(uvplane_obs, matrix, scale=1e-11)
+            uvplane_obs = self.filter_FG(uvplane_obs)
         return uvplane_obs
 
     def get_obs_rmap(self, uvplane, time_error_sigma=10e-12, correlated=True, seed=0, filter_FG=True):
