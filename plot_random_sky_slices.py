@@ -13,7 +13,8 @@ import os, sys
 
 def plot_sky_slices_stat(npix, redundant, sky, seed, error, correlated, ndishes, path='slac', second_plot='terr'):
     if path == 'slac':
-        path = os.path.join(os.environ['HOME'], 'public_html/figs/npix_{npix}_ndish_{ndishes}_redundant_{redundant}_sky_{sky}_seed_{seed}_error_{error}_correlated_{correlated}_filtered.png'.format(npix=npix, ndishes=ndishes, redundant=redundant, sky=sky, seed=seed, error=error, correlated=correlated))
+        #path = os.path.join(os.environ['HOME'], 'public_html/figs/npix_{npix}_ndish_{ndishes}_redundant_{redundant}_sky_{sky}_seed_{seed}_error_{error}_correlated_{correlated}_filtered.png'.format(npix=npix, ndishes=ndishes, redundant=redundant, sky=sky, seed=seed, error=error, correlated=correlated))
+        path = os.path.join(os.environ['HOME'], 'public_html/figs/npix_{npix}_ndish_{ndishes}_redundant_{redundant}_sky_{sky}_seed_{seed}_error_{error}_correlated_{correlated}_not_filtered.png'.format(npix=npix, ndishes=ndishes, redundant=redundant, sky=sky, seed=seed, error=error, correlated=correlated))
         # Check if the image already exists
         if os.path.isfile(path):
             return
@@ -42,9 +43,11 @@ def plot_sky_slices_stat(npix, redundant, sky, seed, error, correlated, ndishes,
     # Observe image
     uvplane = t.observe_image(image)
     # Get observed uvplane
-    uvplane_no_error = t.get_obs_uvplane(uvplane, time_error_sigma=0, filter_FG=True)
+    #uvplane_no_error = t.get_obs_uvplane(uvplane, time_error_sigma=0, filter_FG=True)
+    uvplane_no_error = t.get_obs_uvplane(uvplane, time_error_sigma=0, filter_FG=False)
     if second_plot == 'terr':
-        uvplane_with_error = t.get_obs_uvplane(uvplane, time_error_sigma=error, correlated=correlated, seed=seed, filter_FG=True)
+        #uvplane_with_error = t.get_obs_uvplane(uvplane, time_error_sigma=error, correlated=correlated, seed=seed, filter_FG=True)
+        uvplane_with_error = t.get_obs_uvplane(uvplane, time_error_sigma=error, correlated=correlated, seed=seed, filter_FG=False)
     elif second_plot == 'fweight':
         freqs = t.freqs
         weight = freqs/freqs.mean()
