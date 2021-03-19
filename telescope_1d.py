@@ -628,7 +628,7 @@ class Telescope1D:
         n_col_bins = n_cols//m_baselines
         # Discard some values if necessary
         for i, ps_chunk in enumerate(ps):
-            ps[i] = ps_chunk[:m_baselines*n_row_bins,:m_baselines*n_col_bins]
+            ps[i] = ps_chunk[:m_freq*n_row_bins,:m_baselines*n_col_bins]
         ps_binned = []
         # Bin
         for ps_chunk in ps:
