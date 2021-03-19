@@ -521,7 +521,6 @@ class Telescope1D:
         fig = plt.figure(figsize=(15,15))
         gs = gridspec.GridSpec(4, Nfreqchunks//2, height_ratios=[4, 1, 4, 1])
         for i in range(Nfreqchunks):
-            max_no_error = np.max(rmap_ps_binned_no_error[i])
             max_with_error = np.max(rmap_ps_binned_with_error[i])
             ncol = Nfreqchunks//2
             ax = plt.subplot(gs[i%ncol+(i//ncol)*(ncol*2)])
@@ -531,7 +530,7 @@ class Telescope1D:
                 alpha_idx_binned = a//m # Divide by the m argument of get_rmap_ps
                 alpha = self.alpha[a]
                 color = next(ax._get_lines.prop_cycler)['color']
-                ax.loglog(modes, rmap_ps_binned_no_error[i][:,alpha_idx_binned]/max_no_error,
+                ax.loglog(modes, rmap_ps_binned_no_error[i][:,alpha_idx_binned]/max_with_error,
                            linestyle=':', color=color, label=fr'$\alpha$ = {alpha} (source, no noise)')
                 ax.loglog(modes, rmap_ps_binned_with_error[i][:,alpha_idx_binned]/max_with_error,
                            linestyle='-', color=color, label=fr'$\alpha$ = {alpha} (source, with noise)')
@@ -551,7 +550,7 @@ class Telescope1D:
                 alpha_idx_binned = a//m # Divide by the m argument of get_rmap_ps
                 alpha = self.alpha[a]
                 color = next(ax._get_lines.prop_cycler)['color']
-                ax.loglog(modes, rmap_ps_binned_no_error[i][:,alpha_idx_binned]/max_no_error,
+                ax.loglog(modes, rmap_ps_binned_no_error[i][:,alpha_idx_binned]/max_with_error,
                            linestyle=':', color=color, label=fr'$\alpha$ = {alpha} (no noise)')
                 ax.loglog(modes, rmap_ps_binned_with_error[i][:,alpha_idx_binned]/max_with_error,
                            linestyle='-', color=color, label=fr'$\alpha$ = {alpha} (with noise)')
@@ -565,7 +564,7 @@ class Telescope1D:
             ax.set_title('frequency chunk {}'.format(i+1))
             # Plot the differences (errors - no errors)
             ax1 = plt.subplot(gs[i%ncol+(i//ncol)*(ncol*2)+ncol])
-            ax1.loglog(modes, rmap_ps_binned_with_error[i][:,(self.Npix//2)//m]/max_with_error - rmap_ps_binned_no_error[i][:,(self.Npix//2)//m]/max_no_error,
+            ax1.loglog(modes, rmap_ps_binned_with_error[i][:,(self.Npix//2)//m]/max_with_error - rmap_ps_binned_no_error[i][:,(self.Npix//2)//m]/max_with_error,
                     color=next(ax._get_lines.prop_cycler)['color'], linestyle='--', label=r'(ps with noise - ps no noise) for $\alpha$ = 0')
             if difference_ps_binned is not None:
                 max_diff = np.max(difference_ps_binned[i])
@@ -690,7 +689,6 @@ class Telescope1D:
         fig = plt.figure(figsize=(15,15))
         gs = gridspec.GridSpec(4, Nfreqchunks//2, height_ratios=[4, 1, 4, 1])
         for i in range(Nfreqchunks):
-            max_no_error = np.max(uvplane_ps_binned_no_error[i])
             max_with_error = np.max(uvplane_ps_binned_with_error[i])
             ncol = Nfreqchunks//2
             ax = plt.subplot(gs[i%ncol+(i//ncol)*(ncol*2)])
@@ -706,7 +704,7 @@ class Telescope1D:
                     baseline_idx_binned -= 1
                 bl = self.unique_baseline_lengths[b]
                 color = next(ax._get_lines.prop_cycler)['color']
-                ax.loglog(modes, uvplane_ps_binned_no_error[i][:,baseline_idx_binned]/max_no_error,
+                ax.loglog(modes, uvplane_ps_binned_no_error[i][:,baseline_idx_binned]/max_with_error,
                            linestyle=':', color=color, label=f'baseline length = {bl} m (no noise)')
                 ax.loglog(modes, uvplane_ps_binned_with_error[i][:,baseline_idx_binned]/max_with_error,
                            linestyle='-', color=color, label=f'baseline length = {bl} m (with noise)')
@@ -722,7 +720,7 @@ class Telescope1D:
             ax1 = plt.subplot(gs[i%ncol+(i//ncol)*(ncol*2)+ncol])
             bl = self.unique_baseline_lengths[self.unique_baseline_lengths.shape[0]//2]
             ax1.loglog(modes,
-                    uvplane_ps_binned_with_error[i][:,(self.unique_baseline_lengths.shape[0]//2)//m]/max_with_error - uvplane_ps_binned_no_error[i][:,(self.unique_baseline_lengths.shape[0]//2)//m]/max_no_error,
+                    uvplane_ps_binned_with_error[i][:,(self.unique_baseline_lengths.shape[0]//2)//m]/max_with_error - uvplane_ps_binned_no_error[i][:,(self.unique_baseline_lengths.shape[0]//2)//m]/max_with_error,
                     color=next(ax._get_lines.prop_cycler)['color'], linestyle='--', label=f'(ps with noise - ps no noise) for baseline = {bl} m')
             if difference_ps_binned is not None:
                 max_diff = np.max(difference_ps_binned[i])
