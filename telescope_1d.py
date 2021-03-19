@@ -17,6 +17,8 @@ class Telescope1D:
         '''
         DDish is the diameter of the dishes in meters.
         The minfreq, maxfreq should be in MHz.
+        If redundant is True, it is perfectly redundant; if False, it is
+        less redundant.
         '''
         self.Npix_fft = Npix_fft
         self.Npix = self.Npix_fft+1
@@ -37,9 +39,9 @@ class Telescope1D:
             if redundant:
                 distance = DDish # This makes redundant array
             else:
-                # Distances between two consecutive dishes are
-                # DDish, 1.25*DDish, 1.5*DDish, 1.75*DDish, 2*DDish, DDish, ...
                 #distance = DDish*((ii-1)%5*0.25+1)
+                # Distances between two consecutive dishes are
+                # chosen randomly from DDish, 1.25*DDish, 1.5*DDish
                 distance = DDish*(1+np.random.randint(0,3)/4)
             dish_locations[ii] = dish_locations[ii-1]+distance
         self.dish_locations = dish_locations
@@ -54,10 +56,16 @@ class Telescope1D:
 
     @property
     def freqs(self):
+        '''
+        Get array of frequencies.
+        '''
         return np.linspace(self.minfreq,self.maxfreq,self.Nfreq)
 
     @property
     def lams(self):
+        '''
+        Get array of wavelengths.
+        '''
         return self.freq2lam(self.freqs)
 
     def predict_point(self, alpha):
@@ -84,7 +92,8 @@ class Telescope1D:
 
     def filter_FG(self, uvplane, scale=1e-11):
         '''
-        Filter out the foregrounds (frequency independent).
+        Filter out the foregrounds (foregrounds are frequency independent).
+        Adjust scale to tune the number of eigenvalues being filtered.
         '''
         if self.matrix is None:
             self.matrix = self.get_FG_filtering_matrix_inverse()
@@ -196,6 +205,7 @@ class Telescope1D:
 
     def get_time_errors(self, time_error_sigma=10e-12, correlated=True, seed=0, r0=None):
         '''
+        Get array of time errors for each dish.
         Make argument correlated True for correlated time errors (errors of
         neighboring dishes are more similar than errors of far away dish pairs).
         Make argument r0 bigger to make more correlated.
@@ -220,7 +230,12 @@ class Telescope1D:
 
     def get_obs_uvplane(self, uvplane, time_error_sigma=10e-12, correlated=True, seed=0, filter_FG=True):
         '''
-        Get the uvplane with time error.
+        Get the uvplane with time error. Argument correlated refers to whether
+        or not the errors are correlated among dishes.
+        The time errors are converted to phase errors, then we obtain the new
+        uvplane with the errors.
+        If filter_FG is True, we filter out the foregrounds after adding the
+        timing errors.
         '''
         # Add time errors
         if time_error_sigma > 0:
@@ -250,9 +265,10 @@ class Telescope1D:
 
     def get_obs_rmap(self, uvplane, time_error_sigma=10e-12, correlated=True, seed=0, filter_FG=True):
         '''
-        Get the rmap observed by the telescope array.
+        From the unobserved uvplane (Fourier space), get the
+        rmap (real space map) observed by the telescope array.
         For no time/phase error, do time_error_sigma = 0 seconds.
-        Returns (N frequencies x Npix+1) array.
+        Returns (N frequencies x Npix+1) array rmap_obs.
         '''
         indices = (self.DoL2ndx(self.DoL)+0.5).astype(int)
         rmap_obs = []
@@ -273,7 +289,7 @@ class Telescope1D:
 
     def plot_rmap(self, rmap, vmax=None, vmin=None):
         '''
-        Plot the dirty map.
+        Plot the dirty rmap.
         '''
         plt.figure(figsize=(20,10))
         plt.imshow(rmap,aspect='auto',origin='lower', vmax=vmax, vmin=vmin,
@@ -285,11 +301,11 @@ class Telescope1D:
 
     def get_p2fac(self):
         '''
-        Returns (Nfreq x Npix) array of the beam^2/cos(alpha).
+        Returns (Nfreq x Npix) array of the beam^2/cos(alpha) for convolution.
         '''
         return np.array([np.abs(self.primary_beam_1(f)**2)/np.cos(self.alpha) for f in self.freqs])
 
-    def plot_wedge(self, Nreal=100, time_error_sigma=0, correlated=True, seed=0):
+    def plot_wedge(self, Nreal=100, time_error_sigma=0, correlated=True, seed=0, filter_FG=False):
         '''
         Simulate various skies, and plot the wedge.
         '''
@@ -301,7 +317,7 @@ class Telescope1D:
             sky = self.get_uniform_sky(high=1)
             uvplane = self.observe_image(sky)
             if time_error_sigma > 0:
-                uvplane = self.get_obs_uvplane(uvplane, time_error_sigma, correlated, seed)
+                uvplane = self.get_obs_uvplane(uvplane, time_error_sigma, correlated, seed, filter_FG)
             # After uvplane is done, calculate power spectrum in the frequency direction
             # This gives delay spectrum
             for j in range(Nuniquebaselines):
@@ -317,8 +333,9 @@ class Telescope1D:
 
     def observe_image(self, image):
         '''
-        Take the image, multiply it by the beam^2/cos(alpha).
-        Do for each frequency, return the uvplane.
+        Take the image, multiply it by the beam^2/cos(alpha) (this is called
+        convolution). This gives us the telescope response (what the telescope array sees).
+        Do for each frequency, return the uvplane (in Fourier space).
         '''
         p2fac = self.get_p2fac()
         if len(image.shape) == 1:
