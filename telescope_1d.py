@@ -721,10 +721,11 @@ class Telescope1D:
             bl = self.unique_baseline_lengths[self.unique_baseline_lengths.shape[0]//2]
             ax1.loglog(modes,
                     uvplane_ps_binned_with_error[i][:,(self.unique_baseline_lengths.shape[0]//2)//m]/max_with_error - uvplane_ps_binned_no_error[i][:,(self.unique_baseline_lengths.shape[0]//2)//m]/max_with_error,
-                    color=next(ax._get_lines.prop_cycler)['color'], linestyle='--', label=f'(ps with noise - ps no noise) for baseline = {bl} m')
+                    color=next(ax._get_lines.prop_cycler)['color'], linestyle='--', label=f"(ps with noise - ps no noise)\n" "for baseline = {bl} m")
             if difference_ps_binned is not None:
                 max_diff = np.max(difference_ps_binned[i])
-                ax1.loglog(modes, difference_ps_binned[i][:,(self.unique_baseline_lengths.shape[0]//2)//m]/max_diff, color=next(ax._get_lines.prop_cycler)['color'], linestyle='--', label="ps of (uvplane with noise - uvplane no noise)\n" f"for baseline = {bl} m")
+                ax1.loglog(modes, difference_ps_binned[i][:,(self.unique_baseline_lengths.shape[0]//2)//m]/max_diff, color=next(ax._get_lines.prop_cycler)['color'], linestyle='--',
+                           label="ps of\n" "(uvplane with noise - uvplane no noise)\n" f"for baseline = {bl} m")
             ax1.grid()
         fig.subplots_adjust(wspace=0.2, hspace=0.3, top=0.93, right=0.75)
         ax = plt.subplot(gs[ncol-1])
