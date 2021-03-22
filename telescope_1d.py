@@ -305,19 +305,18 @@ class Telescope1D:
         '''
         return np.array([np.abs(self.primary_beam_1(f)**2)/np.cos(self.alpha) for f in self.freqs])
 
-    def plot_wedge(self, Nreal=100, time_error_sigma=0, correlated=True, seed=0, filter_FG=False):
+    def plot_wedge(self, Nreal=100, time_error_sigma=0, correlated=True, filter_FG=False):
         '''
         Simulate various skies, and plot the wedge.
         '''
-        np.random.seed(seed)
         Nuniquebaselines = self.unique_baseline_lengths.shape[0]
         ps = np.zeros((self.Nfreq+1,Nuniquebaselines)) # (2*Nfreq/2)+1 = Nfreq+1
         for c in range(Nreal):
             # Create a random sky, this sky will be the same at all frequencies
-            sky = self.get_uniform_sky(high=1)
+            sky = self.get_uniform_sky(high=1, seed=c)
             uvplane = self.observe_image(sky)
             if time_error_sigma > 0:
-                uvplane = self.get_obs_uvplane(uvplane, time_error_sigma, correlated, seed, filter_FG)
+                uvplane = self.get_obs_uvplane(uvplane, time_error_sigma, correlated, seed=c, filter_FG)
             # After uvplane is done, calculate power spectrum in the frequency direction
             # This gives delay spectrum
             for j in range(Nuniquebaselines):
