@@ -316,7 +316,7 @@ class Telescope1D:
             sky = self.get_uniform_sky(high=1, seed=c)
             uvplane = self.observe_image(sky)
             if time_error_sigma > 0:
-                uvplane = self.get_obs_uvplane(uvplane, time_error_sigma, correlated, seed=c, filter_FG)
+                uvplane = self.get_obs_uvplane(uvplane=uvplane, time_error_sigma=time_error_sigma, correlated=correlated, seed=c, filter_FG=filter_FG)
             # After uvplane is done, calculate power spectrum in the frequency direction
             # This gives delay spectrum
             for j in range(Nuniquebaselines):
