@@ -1,3 +1,10 @@
+#
+# This code runs with CCL + python3
+#
+# Will run with https://hub.docker.com/repository/docker/slosar/seconda
+# on 3/15/21
+#
+
 import numpy as np
 import matplotlib
 #matplotlib.use('Agg')
