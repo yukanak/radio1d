@@ -17,6 +17,7 @@ from matplotlib.colors import LogNorm
 from itertools import combinations
 from astropy.cosmology import Planck15 as cosmo
 from joblib import Parallel, delayed
+import functools
 
 class Telescope1D:
     def __init__(self, Nfreq=256, Ndishes=32, DDish=6, Npix_fft=2**12, Npad=2**8,
@@ -82,6 +83,7 @@ class Telescope1D:
         '''
         return np.exp(-2j*np.pi*self.DoL*alpha)
 
+    @functools.lru_cache()
     def get_FG_filtering_matrix_inverse(self, step=1):
         '''
         Get the matrix to use in filter_FG.
@@ -97,18 +99,30 @@ class Telescope1D:
                 C+=np.outer(p,np.conj(p))
         return C
 
-    def filter_FG(self, uvplane, scale=1e-11):
+
+    def decompose_filtering(self, matrix):
+        eva, eve = np.linalg.eigh(matrix,'L')
+        return eva, eve
+        
+
+    def filter_FG(self, uvplane, scale=1e-11, matrix=None):
         '''
         Filter out the foregrounds (foregrounds are frequency independent).
         Adjust scale to tune the number of eigenvalues being filtered.
         '''
-        if self.matrix is None:
-            self.matrix = self.get_FG_filtering_matrix_inverse()
-            self.eva, self.eve = np.linalg.eigh(np.copy(self.matrix),'L')
-        minval = np.abs(self.eva).max()*scale
+        if matrix is not None:
+            eva,eve = self.decompose_filtering(matrix)
+        else:
+            if not hasattr(self,"eva"):
+                print ("caching matrix")
+                self.eva = self.decompose_filtering(
+                    self.get_FG_filtering_matrix_inverse())
+            eva,eve = self.eva
+
+        minval = np.abs(eva).max()*scale
         out = np.copy(uvplane).flatten()
         cc = 0
-        for val, vec in zip(self.eva, self.eve.T):
+        for val, vec in zip(eva, eve.T):
             if np.abs(val)>minval:
                 cvec = np.conj(vec)
                 x = np.dot(out,cvec)
@@ -118,6 +132,42 @@ class Telescope1D:
                 cc += 1
         print(f"Filtered {cc} modes.")
         return out.reshape(uvplane.shape)
+
+    def filter_FG_per_baseline(self, uvplane, scale=1e-11):
+        '''
+        Filter out the foregrounds (foregrounds are frequency independent).
+        Some as filter_FG, but filters per unique baseline
+        '''
+        if not hasattr(self,"sing_eva"): ## 
+            print ("caching matrices")
+            matrix = self.get_FG_filtering_matrix_inverse()
+            evas = []
+            Nb=len(self.unique_baseline_lengths)
+            for i in range(Nb):
+                st,en = i*self.Nfreq, (i+1)*self.Nfreq
+                
+                #evas.append(self.decompose_filtering(matrix[st:en,st:en]))
+                evas.append(self.decompose_filtering(matrix[i::Nb,i::Nb]))
+            self.sing_eva=evas
+        ## now we do ths per baseline
+
+        out = np.copy(uvplane)
+        for i,(eva,eve)  in enumerate(self.sing_eva):
+            minval = np.abs(eva).max()*scale
+            cc = 0
+            for val, vec in zip(eva, eve.T):
+                if np.abs(val)>minval:
+                    cvec = np.conj(vec)
+                    x = np.dot(out[:,i],cvec)
+                    out[:,i] -= x*vec
+                    x = np.dot(out[:,i],vec)
+                    out[:,i] -= x*cvec
+                    cc += 1
+            print(f"Filtered {cc} modes for baseline {i}.")
+        return out
+
+
+
     
     def freq2lam(self, freq_MHz):
         '''
@@ -242,7 +292,7 @@ class Telescope1D:
         The time errors are converted to phase errors, then we obtain the new
         uvplane with the errors.
         If filter_FG is True, we filter out the foregrounds after adding the
-        timing errors.
+        timing errors, both the version with single baseline filtering and combined and return all three:
         '''
         # Add time errors
         if time_error_sigma > 0:
@@ -266,9 +316,12 @@ class Telescope1D:
             uvplane_obs = uvplane
         # Filter foregrounds
         if filter_FG:
-            matrix = self.get_FG_filtering_matrix_inverse(step=1)
-            uvplane_obs = self.filter_FG(uvplane_obs)
-        return uvplane_obs
+            uvplane_obs_f = self.filter_FG(uvplane_obs)
+            uvplane_obs_f1 = self.filter_FG_per_baseline(uvplane_obs)
+            return (uvplane_obs,uvplane_obs_f,uvplane_obs_f1)
+        else:
+            return uvplane_obs
+    
 
     def get_obs_rmap(self, uvplane, time_error_sigma=10e-12, correlated=True, seed=0, filter_FG=True):
         '''
@@ -394,11 +447,12 @@ class Telescope1D:
         plt.show()
         return residuals
 
-    def get_point_source_sky(self, idx=None, n=None):
+    def get_point_source_sky(self, idx=None, n=50, seed=0):
         '''
         Make sky image with point sources at locations specified by list idx.
         If idx is not specified, n point source locations are chosen at random.
         '''
+        np.random.seed(seed)
         image = self.empty_image()
         if idx is None:
             idx = []
@@ -407,10 +461,10 @@ class Telescope1D:
         else:
             n = len(idx)
         for i in range(n):
-            image[idx[i]] = 1
+            image[idx[i]] = 1e4
         return image
 
-    def get_gaussian_sky(self, mean=1, sigma_o=0.5, sigma_f=60, seed=0):
+    def get_gaussian_sky(self, mean=0, sigma_o=1.4e4, sigma_f=60, seed=0):
         '''
         Get a correlated Gaussian sky with the specified mean, sigma_o, and
         sigma_f.
@@ -429,12 +483,16 @@ class Telescope1D:
         p = p * 100
         return p
 
-    def get_uniform_sky(self, high=2, seed=0):
+    def get_uniform_sky(self, high=3500, seed=0):
         '''
         Get a uniform random sky from 0 to high.
         '''
         np.random.seed(seed)
         return np.random.uniform(0,high,self.Npix)
+
+    def get_signal(self, level=1, seed=0):
+        return np.random.normal(0,1,(self.Nfreq,self.Npix))
+    
 
     def get_rmap_ps(self, rmap, Nfreqchunks=4, m_alpha=2, m_freq=2, padding=1, window_fn=np.blackman, plot=False, vmin=None, vmax=None, log=True):
         '''
