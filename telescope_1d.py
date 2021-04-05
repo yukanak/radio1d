@@ -491,6 +491,7 @@ class Telescope1D:
         return np.random.uniform(0,high,self.Npix)
 
     def get_signal(self, level=1, seed=0):
+        np.random.seed(seed)
         return np.random.normal(0,1,(self.Nfreq,self.Npix))
     
 
@@ -675,7 +676,7 @@ class Telescope1D:
         beam = norm.pdf(x, 0, sigma)
         return beam
 
-    def get_uvplane_ps(self, uvplane, Nfreqchunks=4, m_baselines=2, m_freq=2, padding=1, window_fn=np.blackman, plot=False, vmin=None, vmax=None, log=True):
+    def get_uvplane_ps(self, uvplane, uvplane2 = None, Nfreqchunks=4, m_baselines=2, m_freq=2, padding=1, window_fn=np.blackman, plot=False, vmin=None, vmax=None, log=True):
         '''
         Get and plot the power spectrum for uvplane.
         For just one full plot of the power spectrum, set Nfreqchunks as 1,
@@ -686,21 +687,32 @@ class Telescope1D:
         '''
         # Divide into frequency chunks
         # In each chunk, FT along the line of sight and square
+        assert (uvplane.shape==(self.Nfreq,len(self.unique_baseline_lengths)))
         n = self.Nfreq//Nfreqchunks
         ps = []
         for i in range(Nfreqchunks):
             #ps_chunk = np.zeros((n+1,self.Npix))
             #for j in range(self.Npix):
             #    ps_chunk[:,j] = np.abs(rfft(np.hstack((rmap[i*n:(1+i)*n,j],np.zeros(n))))**2)
-            if window_fn is not None:
-                tofft = uvplane[i*n:(1+i)*n,:]*(window_fn(n)[:,None])
+            ffts =[]
+            for uvpl in [uvplane, uvplane2]:
+                if uvpl is None:
+                    continue
+                if window_fn is not None:
+                    tofft = uvpl[i*n:(1+i)*n,:]*(window_fn(n)[:,None])
+                else:
+                    tofft = uvpl[i*n:(1+i)*n,:]
+                if padding > 0:
+                    tofft = np.vstack((tofft,np.zeros((n*padding,self.unique_baseline_lengths.shape[0]))))
+                ffts.append(rfft(tofft,axis=0))
+            if len(ffts)==1:
+                ps_chunk = np.abs(ffts[0]**2)
+            elif len(ffts)==2:
+                ps_chunk = np.real(ffts[0]*np.conj(ffts[1]))
             else:
-                tofft = uvplane[i*n:(1+i)*n,:]
-            if padding > 0:
-                tofft = np.vstack((tofft,np.zeros((n*padding,self.unique_baseline_lengths.shape[0]))))
-            ps_chunk = np.abs(rfft(tofft,axis=0)**2)
+                print ('something is wrong')
+                stop()
             ps.append(ps_chunk)
-
         # After getting the power spectra, bin in both x and y directions
         n_rows = n*(1+padding)//2+1
         n_cols = self.unique_baseline_lengths.shape[0]

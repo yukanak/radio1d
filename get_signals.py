@@ -22,10 +22,17 @@ for seed in range(30):
                 print (f"{outfname} exists.")
                 continue
             if t is None:
-                telescope_1d.Telescope1D(Ndishes=ndishes, Npix_fft=npix, redundant=redundant, seed=22)
+                if ndishes<16:
+                    Nfreq = 512
+                elif ndishes <32:
+                    Nfreq = 512
+                else:
+                    Nfreq = 1024
+            
+                t = telescope_1d.Telescope1D(Ndishes=ndishes, Npix_fft=npix, redundant=redundant, Nfreq=Nfreq, seed=22)
             if sig is None:
                 if sigt == 'sig':
-                    sig = t.get_signal(seed)
+                    sig = t.get_signal(seed=seed)
                 elif sigt == 'point':
                     sig =  t.get_point_source_sky(seed=seed)
                 elif sigt =='gauss':
@@ -37,7 +44,7 @@ for seed in range(30):
                     stop
                 uvsig = t.observe_image(sig)
 
-            print (f"Working {outfname}")
+            print (f"Working {outfname}", sig.sum())
             uvplane, uvplane_f, uvplane_1 = t.get_obs_uvplane(uvsig, time_error_sigma=te*1e-12, filter_FG=True)
 
             np.save(outfname,(uvplane, uvplane_f, uvplane_1))
